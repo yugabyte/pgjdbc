@@ -503,6 +503,16 @@ public enum PGProperty {
           + "from that database. "
           + "(backend >= 9.4)"),
 
+  YB_LOAD_BALANCE(
+      "load-balance",
+      "false",
+      "Load Balance connections across multiple tservers"),
+
+  YB_TOPOLOGY_KEYS(
+      "topology-keys",
+      null,
+      "Load Balance connections only in the given topolgies"),
+
   /**
    * Configure optimization to enable batch insert re-writing.
    */

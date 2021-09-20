@@ -120,7 +120,7 @@ releaseParams {
 }
 
 allprojects {
-    group = "org.postgresql"
+    group = "com.yugabyte"
     version = buildVersion
 
     apply(plugin = "com.github.vlsi.gradle-extensions")
@@ -623,7 +623,7 @@ allprojects {
                 // </editor-fold>
                 // <editor-fold defaultstate="collapsed" desc="Configuration of the published pom.xml">
                 create<MavenPublication>(project.name) {
-                    artifactId = project.name
+                    artifactId = "jdbc-yugabytedb"
                     version = rootProject.version.toString()
                     from(components["java"])
 

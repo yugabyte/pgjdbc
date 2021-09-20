@@ -1,0 +1,28 @@
+Creating cluster.
+Waiting for cluster to be ready.
+----------------------------------------------------------------------------------------------------
+| Node Count: 3 | Replication Factor: 3                                                            |
+----------------------------------------------------------------------------------------------------
+| JDBC                : jdbc:postgresql://127.0.0.1:5433/yugabyte                                  |
+| YSQL Shell          : ../../yugabyte-db/build/latest/bin/ysqlsh                                  |
+| YCQL Shell          : ../../yugabyte-db/build/latest/bin/ycqlsh                                  |
+| YEDIS Shell         : ../../yugabyte-db/build/latest/bin/redis-cli                               |
+| Web UI              : http://127.0.0.1:7000/                                                     |
+| Cluster Data        : /Users/kneeraj/yugabyte-data                                               |
+----------------------------------------------------------------------------------------------------
+
+For more info, please use: yb-ctl status
+Adding node.
+Waiting for cluster to be ready.
+----------------------------------------------------------------------------------------------------
+| Node 4: yb-tserver (pid 81517)                                                                   |
+----------------------------------------------------------------------------------------------------
+| JDBC                : jdbc:postgresql://127.0.0.4:5433/yugabyte                                  |
+| YSQL Shell          : ../../yugabyte-db/build/latest/bin/ysqlsh -h 127.0.0.4                     |
+| YCQL Shell          : ../../yugabyte-db/build/latest/bin/ycqlsh 127.0.0.4                        |
+| YEDIS Shell         : ../../yugabyte-db/build/latest/bin/redis-cli -h 127.0.0.4                  |
+| data-dir[0]         : /Users/kneeraj/yugabyte-data/node-4/disk-1/yb-data                         |
+| yb-tserver Logs     : /Users/kneeraj/yugabyte-data/node-4/disk-1/yb-data/tserver/logs            |
+----------------------------------------------------------------------------------------------------
+Stopping node tserver-2.
+Destroying cluster.

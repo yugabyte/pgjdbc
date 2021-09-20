@@ -64,20 +64,20 @@ For more information you can read [the PgJDBC driver documentation](https://jdbc
 ### Building the Connection URL
 The driver recognises JDBC URLs of the form:
 ```
-jdbc:postgresql:database
-jdbc:postgresql:
-jdbc:postgresql://host/database
-jdbc:postgresql://host/
-jdbc:postgresql://host:port/database
-jdbc:postgresql://host:port/
+jdbc:yugabytedb:database
+jdbc:yugabytedb:
+jdbc:yugabytedb://host/database
+jdbc:yugabytedb://host/
+jdbc:yugabytedb://host:port/database
+jdbc:yugabytedb://host:port/
 ```
 The general format for a JDBC URL for connecting to a PostgreSQL server is as follows, with items in square brackets ([ ]) being optional:
 ```
-jdbc:postgresql:[//host[:port]/][database][?property1=value1[&property2=value2]...]
+jdbc:yugabytedb:[//host[:port]/][database][?property1=value1[&property2=value2]...]
 ```
 where:
- * **jdbc:postgresql:** (Required) is known as the sub-protocol and is constant.
- * **host** (Optional) is the server address to connect. This could be a DNS or IP address, or it could be *localhost* or *127.0.0.1* for the local computer. To specify an IPv6 address your must enclose the host parameter with square brackets (jdbc:postgresql://[::1]:5740/accounting). Defaults to `localhost`.
+ * **jdbc:yugabytedb:** (Required) is known as the sub-protocol and is constant.
+ * **host** (Optional) is the server address to connect. This could be a DNS or IP address, or it could be *localhost* or *127.0.0.1* for the local computer. To specify an IPv6 address your must enclose the host parameter with square brackets (jdbc:yugabytedb://[::1]:5740/accounting). Defaults to `localhost`.
  * **port** (Optional) is the port number listening on the host. Defaults to `5432`.
  * **database** (Optional) is the database name. Defaults to the same name as the *user name* used in the connection.
  * **propertyX** (Optional) is one or more option connection properties. For more information see *Connection properties*.
