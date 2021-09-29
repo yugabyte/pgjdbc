@@ -187,7 +187,12 @@ tasks.shadowJar {
     listOf(
             "com.ongres"
     ).forEach {
-        relocate(it, "${project.group}.shaded.$it")
+        relocate(it, "com.yugabyte.shaded.$it") //modified
+    }
+    listOf( // added
+            "org.postgresql"
+    ).forEach {
+        relocate(it, "com.yugabyte")
     }
 }
 

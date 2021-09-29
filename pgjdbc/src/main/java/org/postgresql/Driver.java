@@ -555,6 +555,8 @@ public class Driver implements java.sql.Driver {
           return newConnection;
         }
       } catch (SQLException ex) {
+        // Let the refresh be forced the next time it is tried.
+        loadBalancer.setForRefresh();
         // close the connection for any cleanup. We can ignore the exception here
         try {
           newConnection.close();
