@@ -66,7 +66,7 @@ public class UniformLoadBalanceExample {
       poolProperties.setProperty("dataSource.databaseName", "yugabyte");
       poolProperties.setProperty("dataSource.user", "yugabyte");
       poolProperties.setProperty("dataSource.password", "yugabyte");
-      poolProperties.setProperty("dataSource.loadBalance", "true");
+      // poolProperties.setProperty("dataSource.loadBalance", "true");
       poolProperties.setProperty("dataSource.additionalEndpoints",
         "127.0.0.2:5433,127.0.0.3:5433");
       if (!lbpropvalue.equals("true")) {

@@ -4,9 +4,14 @@ import org.postgresql.PGProperty;
 import org.postgresql.ds.PGSimpleDataSource;
 
 public class YBClusterAwareDataSource extends PGSimpleDataSource {
+
+  public YBClusterAwareDataSource() {
+    setLoadBalance("true");
+  }
+
   private String additionalEndPoints;
 
-  public void setLoadBalance(String value) {
+  private void setLoadBalance(String value) {
     PGProperty.YB_LOAD_BALANCE.set(properties, value);
   }
 
