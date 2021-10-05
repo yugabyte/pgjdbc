@@ -366,16 +366,16 @@ val sourceDistribution by tasks.registering(Tar::class) {
 
 val extraMavenPublications by configurations.getting
 
-// (artifacts) {
-//     extraMavenPublications(sourceDistribution)
-//     extraMavenPublications(osgiJar) {
-//         classifier = ""
-//     }
-//     extraMavenPublications(karaf.features.outputFile) {
-//         builtBy(tasks.named("generateFeatures"))
-//         classifier = "features"
-//     }
-// }
+(artifacts) {
+    extraMavenPublications(sourceDistribution)
+    extraMavenPublications(osgiJar) {
+        classifier = ""
+    }
+    extraMavenPublications(karaf.features.outputFile) {
+        builtBy(tasks.named("generateFeatures"))
+        classifier = "features"
+    }
+}
 
 // <editor-fold defaultstate="collapsed" desc="Populates build/local-maven-repo with artifacts produced by the current project for testing purposes">
 val localRepoElements by configurations.creating {
