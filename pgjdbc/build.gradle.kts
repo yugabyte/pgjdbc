@@ -397,6 +397,15 @@ publishing {
             name = "local"
             url = uri(localRepoDir)
         }
+        maven {
+            name = "remote"
+            url = uri("https://oss.sonatype.org/service/local/staging/deploy/maven2/")
+            credentials {
+                username = System.getenv("OSSRH_USERNAME")
+                password = System.getenv("OSSRH_PASSWORD")
+            }
+        }
+
     }
 }
 
