@@ -54,14 +54,19 @@ or you can visit to this link for the latest version of dependency: https://sear
     ```
     git clone https://github.com/yugabyte/pgjdbc.git && cd pgjdbc
     ```
+2. Checkout the 'yugabyte' branch.
 
-2. Build and install into your local maven folder.
+    ```
+     git checkout yugabyte
+    ```
+
+3. Build and install into your local maven folder.
 
     ```
      ./gradlew publishToMavenLocal -x test -x checkstyleMain
     ```
 
-3. Finally, use it by adding the lines below to your project.
+4. Finally, use it by adding the lines below to your project.
 
     ```xml
     <dependency>

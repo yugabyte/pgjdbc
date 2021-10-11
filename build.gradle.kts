@@ -2,7 +2,9 @@
  * Copyright (c) 2019, PostgreSQL Global Development Group
  * See the LICENSE file in the project root for more information.
  */
-/* Modified by Yugabyte TODO what??
+ 
+/*
+ * Modified by Yugabyte for smart driver functionality
 */
 import com.github.spotbugs.SpotBugsTask
 import com.github.vlsi.gradle.crlf.CrLfSpec
