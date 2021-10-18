@@ -106,7 +106,7 @@ class PGPropertyTest {
   void driverGetPropertyInfo() {
     Driver driver = new Driver();
     DriverPropertyInfo[] infos = driver.getPropertyInfo(
-        "jdbc:postgresql://localhost/test?user=fred&password=secret&ssl=true",
+        "jdbc:yugabytedb://localhost/test?user=fred&password=secret&ssl=true",
         // this is the example we give in docs
         new Properties());
     for (DriverPropertyInfo info : infos) {
@@ -220,7 +220,7 @@ class PGPropertyTest {
     String databaseName = "d&a%ta+base";
     String userName = "&u%ser";
     String password = "p%a&s^s#w!o@r*";
-    String url = "jdbc:postgresql://"
+    String url = "jdbc:yugabytedb://"
         + "localhost" + ":" + 5432 + "/"
         + URLCoder.encode(databaseName)
         + "?user=" + URLCoder.encode(userName)

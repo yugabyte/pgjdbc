@@ -50,7 +50,9 @@ public class ConnectionUtil {
    * @return connection url to server
    */
   public static String getURL() {
-    return TestUtil.getURL();
+    return "jdbc:yugabytedb://" + ConnectionUtil.getServer() + ":" + ConnectionUtil.getPort() + "/"
+        + ConnectionUtil
+        .getDatabase();
   }
 
   /**

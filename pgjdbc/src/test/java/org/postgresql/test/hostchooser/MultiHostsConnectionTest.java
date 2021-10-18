@@ -165,7 +165,7 @@ public class MultiHostsConnectionTest {
     }
 
     StringBuilder sb = new StringBuilder();
-    sb.append("jdbc:postgresql://");
+    sb.append("jdbc:yugabytedb://");
     for (String target : targets) {
       sb.append(target).append(',');
     }

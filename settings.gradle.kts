@@ -2,6 +2,8 @@
  * Copyright (c) 2019, PostgreSQL Global Development Group
  * See the LICENSE file in the project root for more information.
  */
+/* TODO Yugabyte copyright */
+ 
 
 pluginManagement {
     plugins {
@@ -32,14 +34,15 @@ if (JavaVersion.current() < JavaVersion.VERSION_17) {
 
 // This is the name of a current project
 // Note: it cannot be inferred from the directory name as developer might clone pgjdbc to pgjdbc_tmp (or whatever) folder
-rootProject.name = "pgjdbc"
+rootProject.name = "jdbc-yugabytedb"
 
 includeBuild("build-logic")
 
 // Renovate treats names as dependency coordinates when vararg include(...) is used, so we have separate include calls here
-include("benchmarks")
-include("pgjdbc-osgi-test")
+// include("benchmarks")
+// include("pgjdbc-osgi-test")
 include("postgresql")
+include("bom")
 
 project(":postgresql").projectDir = file("pgjdbc")
 

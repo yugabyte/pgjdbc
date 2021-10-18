@@ -53,7 +53,7 @@ class BaseDataSourceFailoverUrlsTest {
     BaseDataSource bds = newDS();
     bds.setDatabaseName("database");
     bds.setPortNumbers(null);
-    assertUrlWithoutParamsEquals("jdbc:postgresql://localhost/database", bds.getURL());
+    assertUrlWithoutParamsEquals("jdbc:yugabytedb://localhost/database", bds.getURL());
     assertEquals(0, bds.getPortNumber());
     assertEquals(0, bds.getPortNumbers()[0]);
   }
@@ -63,7 +63,7 @@ class BaseDataSourceFailoverUrlsTest {
     BaseDataSource bds = newDS();
     bds.setDatabaseName("database");
     bds.setPortNumbers(new int[0]);
-    assertUrlWithoutParamsEquals("jdbc:postgresql://localhost/database", bds.getURL());
+    assertUrlWithoutParamsEquals("jdbc:yugabytedb://localhost/database", bds.getURL());
     assertEquals(0, bds.getPortNumber());
     assertEquals(0, bds.getPortNumbers()[0]);
   }

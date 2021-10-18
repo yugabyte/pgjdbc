@@ -6,13 +6,13 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.postgresql</groupId>
-    <artifactId>postgresql</artifactId>
+    <groupId>com.yugabyte</groupId>
+    <artifactId>jdbc-yugabytedb</artifactId>
     <packaging>jar</packaging>
     <name>PostgreSQL JDBC Driver - JDBC 4.2</name>
-    <version>%{org.postgresql:postgresql}</version>
-    <description>Java JDBC 4.2 (JRE 8+) driver for PostgreSQL database</description>
-    <url>https://github.com/pgjdbc/pgjdbc</url>
+    <version>42.7.3-yb-1-SNAPSHOT</version>
+    <description>Java JDBC 4.2 (JRE 8+) driver for YugabyteDB</description>
+    <url>https://github.com/yugabyte/pgjdbc</url>
 
     <licenses>
         <license>

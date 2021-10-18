@@ -119,18 +119,18 @@ class DriverTest {
     assertFalse(drv.acceptsURL("jdbc:postgresql://localhost/dbname?loggerFile=C%3A%5Cdir%5Cfile.%log"));
     assertFalse(drv.acceptsURL("postgresql:test"));
     assertFalse(drv.acceptsURL("db"));
-    assertFalse(drv.acceptsURL("jdbc:postgresql://localhost:5432a/test"));
-    assertFalse(drv.acceptsURL("jdbc:postgresql://localhost:500000/test"));
-    assertFalse(drv.acceptsURL("jdbc:postgresql://localhost:0/test"));
-    assertFalse(drv.acceptsURL("jdbc:postgresql://localhost:-2/test"));
+    assertFalse(drv.acceptsURL("jdbc:yugabytedb://localhost:5432a/test"));
+    assertFalse(drv.acceptsURL("jdbc:yugabytedb://localhost:500000/test"));
+    assertFalse(drv.acceptsURL("jdbc:yugabytedb://localhost:0/test"));
+    assertFalse(drv.acceptsURL("jdbc:yugabytedb://localhost:-2/test"));
 
     // failover urls
-    verifyUrl(drv, "jdbc:postgresql://localhost,127.0.0.1:5432/test", "localhost,127.0.0.1",
+    verifyUrl(drv, "jdbc:yugabytedb://localhost,127.0.0.1:5432/test", "localhost,127.0.0.1",
         "5432,5432", "test");
-    verifyUrl(drv, "jdbc:postgresql://localhost:5433,127.0.0.1:5432/test", "localhost,127.0.0.1",
+    verifyUrl(drv, "jdbc:yugabytedb://localhost:5433,127.0.0.1:5432/test", "localhost,127.0.0.1",
         "5433,5432", "test");
-    verifyUrl(drv, "jdbc:postgresql://[::1],[::1]:5432/db", "[::1],[::1]", "5432,5432", "db");
-    verifyUrl(drv, "jdbc:postgresql://[::1]:5740,127.0.0.1:5432/db", "[::1],127.0.0.1", "5740,5432",
+    verifyUrl(drv, "jdbc:yugabytedb://[::1],[::1]:5432/db", "[::1],[::1]", "5432,5432", "db");
+    verifyUrl(drv, "jdbc:yugabytedb://[::1]:5740,127.0.0.1:5432/db", "[::1],127.0.0.1", "5740,5432",
         "db");
   }
 
