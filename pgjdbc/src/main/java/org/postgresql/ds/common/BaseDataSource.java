@@ -1226,8 +1226,10 @@ public abstract class BaseDataSource implements CommonDataSource, Referenceable 
     } else {
       url.append(serverName);
     }
-    if (portNumber != 0) {
-      url.append(":").append(portNumber);
+    // portNumber is deprecated. Manipulation based on that wouldn't reflect the actual value
+    if (portNumbers.length > 0) {
+      Arrays.stream(portNumbers).filter(num -> num > 0).findFirst()
+          .ifPresent(port -> url.append(":").append(port));
     }
     String moreEndPoints = getAdditionalEndPoints();
     if (moreEndPoints != null) {
