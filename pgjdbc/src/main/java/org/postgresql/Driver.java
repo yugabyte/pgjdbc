@@ -798,16 +798,6 @@ public class Driver implements java.sql.Driver {
       }
     }
 
-    // Check for new load balance properties
-    //if (priority3Service != null) {
-    //  if (priority3Service.containsKey("load-balance")) {
-    //    urlProps.setProperty("load-balance", priority3Service.getProperty("load-balance"));
-    //  }
-    //  if (priority3Service.containsKey("topology-keys")) {
-    //    urlProps.setProperty("topology-keys", priority3Service.getProperty("topology-keys"));
-    //  }
-    //}
-
     // load pg_service.conf
     if (serviceName != null) {
       LOGGER.log(Level.FINE, "Processing option [?service={0}]", serviceName);
