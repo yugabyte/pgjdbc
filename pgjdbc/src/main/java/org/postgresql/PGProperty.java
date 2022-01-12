@@ -439,7 +439,7 @@ public enum PGProperty {
    */
   PG_PORT(
       "PGPORT",
-      "5432",
+      "5433",
       "Port of the PostgreSQL server (may be specified directly in the JDBC URL)"),
 
   /**
