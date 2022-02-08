@@ -14,6 +14,12 @@
 package com.yugabyte.ysql;
 
 import org.postgresql.jdbc.PgConnection;
+import org.postgresql.util.GT;
+import org.postgresql.util.PSQLException;
+import org.postgresql.util.PSQLState;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -63,7 +69,17 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
     ArrayList<String> currentPrivateIps = new ArrayList<>();
     ArrayList<String> currentPublicIps = new ArrayList<>();
     String hostConnectedTo = ((PgConnection) conn).getQueryExecutor().getHostSpec().getHost();
+    InetAddress hostConnectedInetAddr;
     Boolean useHostColumn = null;
+
+    try {
+      hostConnectedInetAddr = InetAddress.getByName(hostConnectedTo);
+    } catch (UnknownHostException e) {
+      // This is totally unexpected. As the connection is already created on this host
+      throw new PSQLException(GT.tr("Unexpected UnknownHostException for ${0} ", hostConnectedTo),
+          PSQLState.UNKNOWN_STATE, e);
+    }
+
     while (rs.next()) {
       String host = rs.getString("host");
       String publicIp = rs.getString("public_ip");
@@ -73,9 +89,24 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       String port = rs.getString("port");
       hostPortMap.put(host, port);
       hostPortMapPublic.put(publicIp, port);
-      if (hostConnectedTo.equals(host)) {
+      InetAddress hostInetAddr;
+      InetAddress publicHostInetAddr;
+      try {
+        hostInetAddr = InetAddress.getByName(host);
+      } catch (UnknownHostException e) {
+        // set the hostInet to null
+        hostInetAddr = null;
+      }
+      try {
+        publicHostInetAddr = !publicIp.isEmpty()
+            ? InetAddress.getByName(publicIp) : null;
+      } catch (UnknownHostException e) {
+        // set the publicHostInetAddr to null
+        publicHostInetAddr = null;
+      }
+      if (hostConnectedInetAddr.equals(hostInetAddr)) {
         useHostColumn = Boolean.TRUE;
-      } else if (hostConnectedTo.equals(publicIp)) {
+      } else if (hostConnectedInetAddr.equals(publicHostInetAddr)) {
         useHostColumn = Boolean.FALSE;
       }
       CloudPlacement cp = new CloudPlacement(cloud, region, zone);
