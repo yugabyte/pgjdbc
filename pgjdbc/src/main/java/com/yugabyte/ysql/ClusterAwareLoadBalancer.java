@@ -39,6 +39,8 @@ public class ClusterAwareLoadBalancer {
   Set<String> unreachableHosts = new HashSet<>();
   protected Map<String, String> hostPortMap = new HashMap<>();
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
+  protected ArrayList<String> currentPublicIps = new ArrayList<>();
+  protected Boolean useHostColumn = null;
 
   public static ClusterAwareLoadBalancer instance() {
     return instance;
@@ -91,6 +93,23 @@ public class ClusterAwareLoadBalancer {
     }
     if (chosenHost != null) {
       updateConnectionMap(chosenHost, 1);
+    } else if (useHostColumn == null) {
+      // Current host inet addr did not match with either host inet or public_ip inet addr AND
+      // Now we have exhausted the servers list which was populated with (private) host values.
+      // So try connecting to the public_ips.
+      ArrayList<String> newList = new ArrayList<String>();
+      newList.addAll(currentPublicIps);
+      if (!newList.isEmpty()) {
+        useHostColumn = Boolean.FALSE;
+        servers = newList;
+        unreachableHosts.clear();
+        for (String h : servers) {
+          if (!hostToNumConnMap.containsKey(h)) {
+            hostToNumConnMap.put(h, 0);
+          }
+        }
+        return getLeastLoadedServer(failedHosts); // base condition for this recursive call is useHostColumn != null
+      }
     }
     LOGGER.log(Level.FINE,
         getLoadBalancerType() + ": Host chosen for new connection: " + chosenHost);
@@ -126,11 +145,9 @@ public class ClusterAwareLoadBalancer {
         + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     ArrayList<String> currentPrivateIps = new ArrayList<>();
-    ArrayList<String> currentPublicIps = new ArrayList<>();
     String hostConnectedTo = ((PgConnection) conn).getQueryExecutor().getHostSpec().getHost();
     InetAddress hostConnectedInetAddr;
 
-    Boolean useHostColumn = null;
     boolean isIpv6Addresses = hostConnectedTo.contains(":");
     if (isIpv6Addresses) {
       hostConnectedTo = hostConnectedTo.replace("[", "").replace("]", "");
@@ -144,14 +161,17 @@ public class ClusterAwareLoadBalancer {
           PSQLState.UNKNOWN_STATE, e);
     }
 
+    currentPublicIps.clear();
     while (rs.next()) {
       String host = rs.getString("host");
       String publicHost = rs.getString("public_ip");
       String port = rs.getString("port");
+      String cloud = rs.getString("cloud");
+      String region = rs.getString("region");
+      String zone = rs.getString("zone");
       hostPortMap.put(host, port);
       hostPortMapPublic.put(publicHost, port);
-      currentPrivateIps.add(host);
-      currentPublicIps.add(publicHost);
+      updateCurrentHostList(currentPrivateIps, host, publicHost, cloud, region, zone);
       InetAddress hostInetAddr;
       InetAddress publicHostInetAddr;
       try {
@@ -175,19 +195,30 @@ public class ClusterAwareLoadBalancer {
         }
       }
     }
-    return getPrivateOrPublicServers(useHostColumn, currentPrivateIps, currentPublicIps);
+    return getPrivateOrPublicServers(currentPrivateIps, currentPublicIps);
   }
 
-  protected ArrayList<String> getPrivateOrPublicServers(
-      Boolean useHostColumn, ArrayList<String> privateHosts, ArrayList<String> publicHosts) {
+  protected ArrayList<String> getPrivateOrPublicServers(ArrayList<String> privateHosts,
+      ArrayList<String> publicHosts) {
     if (useHostColumn == null) {
-      LOGGER.log(Level.WARNING, getLoadBalancerType() + ": Either private or public should have "
-          + "matched with one of the servers");
-      return null;
+      if (publicHosts.isEmpty()) {
+        useHostColumn = Boolean.TRUE;
+      }
+      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Either private or public should have "
+          + "matched with one of the servers. Using private addresses.");
+      return privateHosts;
     }
     ArrayList<String> currentHosts = useHostColumn ? privateHosts : publicHosts;
     LOGGER.log(Level.FINE, getLoadBalancerType() + ": List of servers got {0}", currentHosts);
     return currentHosts;
+  }
+
+  protected void updateCurrentHostList(ArrayList<String> currentPrivateIps, String host,
+      String publicIp, String cloud, String region, String zone) {
+    currentPrivateIps.add(host);
+    if (!publicIp.trim().isEmpty()) {
+      currentPublicIps.add(publicIp);
+    }
   }
 
   protected String getLoadBalancerType() {

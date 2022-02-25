@@ -61,69 +61,22 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   }
 
   @Override
-  protected ArrayList<String> getCurrentServers(Connection conn) throws SQLException {
-    Statement st = conn.createStatement();
-    LOGGER.log(Level.FINE,
-        getLoadBalancerType() + ": Getting the list of servers in: " + placements);
-    ResultSet rs = st.executeQuery(ClusterAwareLoadBalancer.GET_SERVERS_QUERY);
-    ArrayList<String> currentPrivateIps = new ArrayList<>();
-    ArrayList<String> currentPublicIps = new ArrayList<>();
-    String hostConnectedTo = ((PgConnection) conn).getQueryExecutor().getHostSpec().getHost();
-    InetAddress hostConnectedInetAddr;
-    Boolean useHostColumn = null;
-
-    try {
-      hostConnectedInetAddr = InetAddress.getByName(hostConnectedTo);
-    } catch (UnknownHostException e) {
-      // This is totally unexpected. As the connection is already created on this host
-      throw new PSQLException(GT.tr("Unexpected UnknownHostException for ${0} ", hostConnectedTo),
-          PSQLState.UNKNOWN_STATE, e);
-    }
-
-    while (rs.next()) {
-      String host = rs.getString("host");
-      String publicIp = rs.getString("public_ip");
-      String cloud = rs.getString("cloud");
-      String region = rs.getString("region");
-      String zone = rs.getString("zone");
-      String port = rs.getString("port");
-      hostPortMap.put(host, port);
-      hostPortMapPublic.put(publicIp, port);
-      InetAddress hostInetAddr;
-      InetAddress publicHostInetAddr;
-      try {
-        hostInetAddr = InetAddress.getByName(host);
-      } catch (UnknownHostException e) {
-        // set the hostInet to null
-        hostInetAddr = null;
-      }
-      try {
-        publicHostInetAddr = !publicIp.isEmpty()
-            ? InetAddress.getByName(publicIp) : null;
-      } catch (UnknownHostException e) {
-        // set the publicHostInetAddr to null
-        publicHostInetAddr = null;
-      }
-      if (hostConnectedInetAddr.equals(hostInetAddr)) {
-        useHostColumn = Boolean.TRUE;
-      } else if (hostConnectedInetAddr.equals(publicHostInetAddr)) {
-        useHostColumn = Boolean.FALSE;
-      }
-      CloudPlacement cp = new CloudPlacement(cloud, region, zone);
-      if (allowedPlacements.contains(cp)) {
-        LOGGER.log(Level.FINE,
-            getLoadBalancerType() + ": allowedPlacements set: "
-                + allowedPlacements + " returned contains true for cp: " + cp);
-        currentPrivateIps.add(host);
+  protected void updateCurrentHostList(ArrayList<String> currentPrivateIps, String host,
+      String publicIp, String cloud, String region, String zone) {
+    CloudPlacement cp = new CloudPlacement(cloud, region, zone);
+    if (allowedPlacements.contains(cp)) {
+      LOGGER.log(Level.FINE,
+          getLoadBalancerType() + ": allowedPlacements set: "
+              + allowedPlacements + " returned contains true for cp: " + cp);
+      currentPrivateIps.add(host);
+      if (!publicIp.trim().isEmpty()) {
         currentPublicIps.add(publicIp);
-      } else {
-        LOGGER.log(Level.FINE,
-            getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
-                + " returned contains false for cp: " + cp);
-
       }
+    } else {
+      LOGGER.log(Level.FINE,
+          getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
+              + " returned contains false for cp: " + cp);
     }
-    return getPrivateOrPublicServers(useHostColumn, currentPrivateIps, currentPublicIps);
   }
 
   protected String getLoadBalancerType() {
