@@ -13,12 +13,6 @@
 
 package com.yugabyte.ysql;
 
-import org.postgresql.jdbc.PgConnection;
-
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.*;
 import java.util.logging.Level;
 
@@ -55,44 +49,22 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   }
 
   @Override
-  protected ArrayList<String> getCurrentServers(Connection conn) throws SQLException {
-    Statement st = conn.createStatement();
-    LOGGER.log(Level.FINE,
-        getLoadBalancerType() + ": Getting the list of servers in: " + placements);
-    ResultSet rs = st.executeQuery(ClusterAwareLoadBalancer.GET_SERVERS_QUERY);
-    ArrayList<String> currentPrivateIps = new ArrayList<>();
-    ArrayList<String> currentPublicIps = new ArrayList<>();
-    String hostConnectedTo = ((PgConnection) conn).getQueryExecutor().getHostSpec().getHost();
-    Boolean useHostColumn = null;
-    while (rs.next()) {
-      String host = rs.getString("host");
-      String publicIp = rs.getString("public_ip");
-      String cloud = rs.getString("cloud");
-      String region = rs.getString("region");
-      String zone = rs.getString("zone");
-      String port = rs.getString("port");
-      hostPortMap.put(host, port);
-      hostPortMapPublic.put(publicIp, port);
-      if (hostConnectedTo.equals(host)) {
-        useHostColumn = Boolean.TRUE;
-      } else if (hostConnectedTo.equals(publicIp)) {
-        useHostColumn = Boolean.FALSE;
-      }
-      CloudPlacement cp = new CloudPlacement(cloud, region, zone);
-      if (allowedPlacements.contains(cp)) {
-        LOGGER.log(Level.FINE,
-            getLoadBalancerType() + ": allowedPlacements set: "
-                + allowedPlacements + " returned contains true for cp: " + cp);
-        currentPrivateIps.add(host);
+  protected void updateCurrentHostList(ArrayList<String> currentPrivateIps, String host,
+      String publicIp, String cloud, String region, String zone) {
+    CloudPlacement cp = new CloudPlacement(cloud, region, zone);
+    if (allowedPlacements.contains(cp)) {
+      LOGGER.log(Level.FINE,
+          getLoadBalancerType() + ": allowedPlacements set: "
+              + allowedPlacements + " returned contains true for cp: " + cp);
+      currentPrivateIps.add(host);
+      if (!publicIp.trim().isEmpty()) {
         currentPublicIps.add(publicIp);
-      } else {
-        LOGGER.log(Level.FINE,
-            getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
-                + " returned contains false for cp: " + cp);
-
       }
+    } else {
+      LOGGER.log(Level.FINE,
+          getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
+              + " returned contains false for cp: " + cp);
     }
-    return getPrivateOrPublicServers(useHostColumn, currentPrivateIps, currentPublicIps);
   }
 
   protected String getLoadBalancerType() {
