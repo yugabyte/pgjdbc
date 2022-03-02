@@ -13,18 +13,6 @@
 
 package com.yugabyte.ysql;
 
-import org.postgresql.jdbc.PgConnection;
-import org.postgresql.util.GT;
-import org.postgresql.util.PSQLException;
-import org.postgresql.util.PSQLState;
-
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.*;
 import java.util.logging.Level;
 
