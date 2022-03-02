@@ -75,11 +75,12 @@ public class UniformLoadBalanceExample {
       poolProperties.setProperty("connectionTimeout", "1000000");
       poolProperties.setProperty("autoCommit", "true");
       poolProperties.setProperty("dataSource.serverName", hostName);
+      poolProperties.setProperty("dataSource.portNumber", port);
       poolProperties.setProperty("dataSource.databaseName", "yugabyte");
       poolProperties.setProperty("dataSource.user", "yugabyte");
       poolProperties.setProperty("dataSource.password", "yugabyte");
       poolProperties.setProperty("dataSource.additionalEndpoints",
-          "127.0.0.2,127.0.0.3");
+          "127.0.0.2:" + port + ",127.0.0.3:" + port);
       if (!lbpropvalue.equals("true")) {
         poolProperties.setProperty("dataSource.topologyKeys", lookupKey);
       }
