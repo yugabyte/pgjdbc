@@ -20,7 +20,7 @@ This is similar to 'Cluster Awareness' but uses those servers which are part of 
 ### Connection Properties added for load balancing
 
 - _load-balance_   - It expects **true/false** as its possible values. In YBClusterAwareDataSource load balancing is true by default. However when using the DriverManager.getConnection() API the 'load-balance' property needs to be set to 'true'.
-- _topology-keys_  - It takes a comma separated geo-location values. The geo-location can be given as 'cloud:region:zone'.
+- _topology-keys_  - It takes a comma separated geo-location values. The geo-location can be given as 'cloud.region.zone'.
 
 Please refer to the [Use the Driver](#Use the Driver) section for examples.
 
@@ -97,8 +97,8 @@ or you can visit to this link for the latest version of dependency: https://sear
     ds.setUrl(jdbcUrl);
     // If topology aware distribution to be enabled then
     ds.setTopologyKeys("cloud1.region1.zone1,cloud1.region2.zone2");
-    // If you want to provide more endpoints to safeguard against even first connection failure due
-    to the possible unavailability of initial contact point.
+    // If you want to provide more endpoints to safeguard against even first connection failure
+    // due to the possible unavailability of initial contact point:
     ds.setAdditionalEndpoints("127.0.0.2:5433,127.0.0.3:5433");
 
     Connection conn = ds.getConnection();
@@ -119,7 +119,7 @@ or you can visit to this link for the latest version of dependency: https://sear
     String additionalEndpoints = "127.0.0.2:5433,127.0.0.3:5433,127.0.0.4:5433,127.0.0.5:5433";
     poolProperties.setProperty("dataSource.additionalEndpoints", additionalEndpoints);
     // If you want to load balance between specific geo locations using topology keys
-    String geoLocations = "region1.zone1,region2.zone2";
+    String geoLocations = "cloud1.region1.zone1,cloud1.region2.zone2";
     poolProperties.setProperty("dataSource.topologyKeys", geoLocations);
 
     poolProperties.setProperty("poolName", name);
@@ -130,3 +130,10 @@ or you can visit to this link for the latest version of dependency: https://sear
 
     Connection conn = ds.getConnection();
     ```
+
+    Note that the property `dataSource.additionalEndpoints`, if specified, should include the respective port numbers as
+    shown above, specially if those are not the default port numbers (`5433`).
+
+    Otherwise, when the driver needs to connect to any of these additional endpoints (when the primary endpoint
+    specified via `serverName` is unavailable), it will use the default port number (`5433`) and not
+    `dataSource.portNumber` to connect to them.

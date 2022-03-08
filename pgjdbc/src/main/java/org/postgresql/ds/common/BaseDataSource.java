@@ -303,6 +303,7 @@ public abstract class BaseDataSource implements CommonDataSource, Referenceable 
    */
   @Deprecated
   public void setPortNumber(int portNumber) {
+    this.portNumber = portNumber;
     setPortNumbers(new int[] { portNumber });
   }
 
