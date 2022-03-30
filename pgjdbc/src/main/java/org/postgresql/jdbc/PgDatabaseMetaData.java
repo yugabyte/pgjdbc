@@ -1416,10 +1416,13 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
   @Override
   public ResultSet getTables(@Nullable String catalog, @Nullable String schemaPattern,
       @Nullable String tableNamePattern, String @Nullable [] types) throws SQLException {
-    String select;
+    String select = "";
     String orderby;
     String useSchemas = "SCHEMAS";
-    select = "SELECT NULL AS TABLE_CAT, n.nspname AS TABLE_SCHEM, c.relname AS TABLE_NAME, "
+    if (connection.getYbPgDatabaseMetaDataHintString() != null) {
+      select = "/*+" + connection.getYbPgDatabaseMetaDataHintString() + "*/ ";
+    }
+    select += "SELECT NULL AS TABLE_CAT, n.nspname AS TABLE_SCHEM, c.relname AS TABLE_NAME, "
              + " CASE n.nspname ~ '^pg_' OR n.nspname = 'information_schema' "
              + " WHEN true THEN CASE "
              + " WHEN n.nspname = 'pg_catalog' OR n.nspname = 'information_schema' THEN CASE c.relkind "
@@ -1661,7 +1664,7 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
     f[22] = new Field("IS_AUTOINCREMENT", Oid.VARCHAR);
     f[23] = new Field( "IS_GENERATEDCOLUMN", Oid.VARCHAR);
 
-    String sql;
+    String sql = "";
     // a.attnum isn't decremented when preceding columns are dropped,
     // so the only way to calculate the correct column number is with
     // window functions, new in 8.4.
@@ -1670,10 +1673,13 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
     // function as possible (schema/table names), but must leave
     // column name outside so we correctly count the other columns.
     //
+    if (connection.getYbPgDatabaseMetaDataHintString() != null) {
+      sql = "/*+" + connection.getYbPgDatabaseMetaDataHintString() + "*/ ";
+    }
     if (connection.haveMinimumServerVersion(ServerVersion.v8_4)) {
-      sql = "SELECT * FROM (";
+      sql += "SELECT * FROM (";
     } else {
-      sql = "";
+      sql += "";
     }
 
     sql += "SELECT n.nspname,c.relname,a.attname,a.atttypid,a.attnotnull "
