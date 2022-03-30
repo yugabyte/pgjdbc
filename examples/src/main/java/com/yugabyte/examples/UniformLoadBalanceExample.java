@@ -50,6 +50,7 @@ public class UniformLoadBalanceExample {
         + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true";
     }
 
+    System.setProperty("yugabytedb.pgdatabasemetadata.hint", "set(enable_nestloop off)");
     System.out.println("Setting up the connection pool having 6 connections.......");
 
     testUsingHikariPool("uniform_load_balance", "true", "simple",

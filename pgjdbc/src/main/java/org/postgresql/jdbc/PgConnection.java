@@ -182,6 +182,7 @@ public class PgConnection implements BaseConnection {
   private final LruCache<FieldMetadata.Key, FieldMetadata> fieldMetadataCache;
 
   private ClusterAwareLoadBalancer loadBalancer;
+  private String ybPgDatabaseMetaDataHintString;
 
   private final @Nullable String xmlFactoryFactoryClass;
   private @Nullable PGXmlFactoryFactory xmlFactoryFactory;
@@ -342,6 +343,8 @@ public class PgConnection implements BaseConnection {
     replicationConnection = PGProperty.REPLICATION.get(info) != null;
 
     xmlFactoryFactoryClass = PGProperty.XML_FACTORY_FACTORY.get(info);
+    String hint = System.getProperty("yugabytedb.pgdatabasemetadata.hint");
+    ybPgDatabaseMetaDataHintString = (hint != null && !hint.trim().isEmpty()) ? hint.trim() : null;
   }
 
   private static ReadOnlyBehavior getReadOnlyBehavior(String property) {
@@ -776,6 +779,10 @@ public class PgConnection implements BaseConnection {
 
   public void setLoadBalancer(ClusterAwareLoadBalancer lb) {
     this.loadBalancer = lb;
+  }
+
+  public String getYbPgDatabaseMetaDataHintString() {
+    return ybPgDatabaseMetaDataHintString;
   }
 
   @Override
