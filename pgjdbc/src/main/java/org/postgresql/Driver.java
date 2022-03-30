@@ -23,6 +23,8 @@ package org.postgresql;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
+import com.yugabyte.ysql.PropertiesUtil;
+
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.DriverInfo;
 import org.postgresql.util.ExpressionProperties;
@@ -480,11 +482,15 @@ public class Driver implements java.sql.Driver {
    * thread without enforcing a timeout, regardless of any timeout specified in the properties.
    *
    * @param url the original URL
-   * @param props the parsed/defaulted connection properties
+   * @param properties the parsed/defaulted connection properties
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
   private static Connection makeConnection(String url, Properties properties) throws SQLException {
+    String restrictNestLoop = PropertiesUtil.getYBProperty(url, PropertiesUtil.RESTRICT_NEST_LOOP_KEY);
+    if (restrictNestLoop != null) {
+      PGProperty.RESTRICT_NEST_LOOP.set(properties, Boolean.parseBoolean(restrictNestLoop));
+    }
     LoadBalanceProperties lbprops = new LoadBalanceProperties(url, properties);
     if (lbprops.hasLoadBalance()) {
       Connection conn = getConnectionBalanced(lbprops);

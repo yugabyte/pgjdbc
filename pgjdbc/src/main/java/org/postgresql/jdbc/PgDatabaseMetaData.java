@@ -54,6 +54,8 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
   private int nameDataLength = 0; // length for name datatype
   private int indexMaxKeys = 0; // maximum number of keys in an index.
 
+  private String HINT_NEST_LOOP_OFF = "/*+set(enable_nestloop off)*/ ";
+
   protected int getMaxIndexKeys() throws SQLException {
     if (indexMaxKeys == 0) {
       String sql;
@@ -1267,10 +1269,10 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
   @Override
   public ResultSet getTables(@Nullable String catalog, @Nullable String schemaPattern,
       @Nullable String tableNamePattern, String @Nullable [] types) throws SQLException {
-    String select;
+    String select = connection.getRestrictNestLoop() ? HINT_NEST_LOOP_OFF : "";
     String orderby;
     String useSchemas = "SCHEMAS";
-    select = "SELECT NULL AS TABLE_CAT, n.nspname AS TABLE_SCHEM, c.relname AS TABLE_NAME, "
+    select += "SELECT NULL AS TABLE_CAT, n.nspname AS TABLE_SCHEM, c.relname AS TABLE_NAME, "
              + " CASE n.nspname ~ '^pg_' OR n.nspname = 'information_schema' "
              + " WHEN true THEN CASE "
              + " WHEN n.nspname = 'pg_catalog' OR n.nspname = 'information_schema' THEN CASE c.relkind "
@@ -1528,10 +1530,11 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
     // function as possible (schema/table names), but must leave
     // column name outside so we correctly count the other columns.
     //
+    sql = connection.getRestrictNestLoop() ? HINT_NEST_LOOP_OFF : "";
     if (connection.haveMinimumServerVersion(ServerVersion.v8_4)) {
-      sql = "SELECT * FROM (";
+      sql += "SELECT * FROM (";
     } else {
-      sql = "";
+      sql += "";
     }
 
     sql += "SELECT n.nspname,c.relname,a.attname,a.atttypid,a.attnotnull "

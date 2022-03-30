@@ -32,6 +32,10 @@ public class YBClusterAwareDataSource extends PGSimpleDataSource {
     PGProperty.YB_TOPOLOGY_KEYS.set(properties, value);
   }
 
+  public void setRestrictNestLoop(String value) {
+    PGProperty.RESTRICT_NEST_LOOP.set(properties, value);
+  }
+
   // additionalEndpoints
   public void setAdditionalEndpoints(String value) {
     this.additionalEndPoints = value;

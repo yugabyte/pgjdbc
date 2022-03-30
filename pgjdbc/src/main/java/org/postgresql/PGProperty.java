@@ -539,6 +539,11 @@ public enum PGProperty {
       null,
       "Load Balance connections only in the given topolgies"),
 
+  RESTRICT_NEST_LOOP(
+      "restrictNestLoop",
+      "false",
+      "Specifies if nested loop should be disabled for PgDatabaseMetaData.getTables()/getColumns()."),
+
   /**
    * Configure optimization to enable batch insert re-writing.
    */

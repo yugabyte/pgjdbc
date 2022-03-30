@@ -50,15 +50,14 @@ public class LoadBalanceProperties {
   }
 
   public String processURLAndProperties() {
-    String[] urlParts = this.originalUrl.split(PROPERTY_SEP);
-    StringBuilder sb = new StringBuilder();
+    String[] urlParts = this.originalUrl.split(PropertiesUtil.FIRST_PROPERTY_SEP);
+    if (urlParts.length != 2) return this.originalUrl;
+
+    StringBuilder sb = new StringBuilder(urlParts[0]);
+    urlParts = urlParts[1].split(PROPERTY_SEP);
     String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
     String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
     for (String part : urlParts) {
-      if (sb.length() == 0) {
-        sb.append(part);
-        continue;
-      }
       if (part.startsWith(loadBalancerKey)) {
         String[] lbParts = part.split(EQUALS);
         if (lbParts.length < 2) {
@@ -77,7 +76,11 @@ public class LoadBalanceProperties {
         }
         placements = lbParts[1];
       } else {
-        sb.append('&');
+        if (sb.toString().contains(PropertiesUtil.FIRST_PROPERTY_SEP)) {
+          sb.append(PROPERTY_SEP);
+        } else {
+          sb.append(PropertiesUtil.FIRST_PROPERTY_SEP);
+        }
         sb.append(part);
       }
     }

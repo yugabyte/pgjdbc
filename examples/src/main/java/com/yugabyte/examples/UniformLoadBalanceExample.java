@@ -44,10 +44,10 @@ public class UniformLoadBalanceExample {
 
     if (debugLogging) {
       controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&loggerLevel=debug";
+        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&loggerLevel=debug&restrict-nest-loop=true";
     } else {
       controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true";
+        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&restrict-nest-loop=true";
     }
 
     System.out.println("Setting up the connection pool having 6 connections.......");
@@ -79,6 +79,7 @@ public class UniformLoadBalanceExample {
       poolProperties.setProperty("dataSource.databaseName", "yugabyte");
       poolProperties.setProperty("dataSource.user", "yugabyte");
       poolProperties.setProperty("dataSource.password", "yugabyte");
+      poolProperties.setProperty("dataSource.restrictNestLoop", "true");
       poolProperties.setProperty("dataSource.additionalEndpoints",
           "127.0.0.2:" + port + ",127.0.0.3:" + port);
       if (!lbpropvalue.equals("true")) {
