@@ -182,7 +182,7 @@ public class PgConnection implements BaseConnection {
   private final LruCache<FieldMetadata.Key, FieldMetadata> fieldMetadataCache;
 
   private ClusterAwareLoadBalancer loadBalancer;
-  private String ybPgDatabaseMetaDataHintString;
+  private boolean disableNestLoopForMetadataSQLs;
 
   private final @Nullable String xmlFactoryFactoryClass;
   private @Nullable PGXmlFactoryFactory xmlFactoryFactory;
@@ -343,8 +343,7 @@ public class PgConnection implements BaseConnection {
     replicationConnection = PGProperty.REPLICATION.get(info) != null;
 
     xmlFactoryFactoryClass = PGProperty.XML_FACTORY_FACTORY.get(info);
-    String hint = System.getProperty("yugabytedb.pgdatabasemetadata.hint");
-    ybPgDatabaseMetaDataHintString = (hint != null && !hint.trim().isEmpty()) ? hint.trim() : null;
+    disableNestLoopForMetadataSQLs = Boolean.parseBoolean(System.getProperty("ybdb.pgdbmetadata.nestloop.disable"));
   }
 
   private static ReadOnlyBehavior getReadOnlyBehavior(String property) {
@@ -781,8 +780,8 @@ public class PgConnection implements BaseConnection {
     this.loadBalancer = lb;
   }
 
-  public String getYbPgDatabaseMetaDataHintString() {
-    return ybPgDatabaseMetaDataHintString;
+  public boolean getDisableNestLoopForMetadataSQLs() {
+    return disableNestLoopForMetadataSQLs;
   }
 
   @Override
