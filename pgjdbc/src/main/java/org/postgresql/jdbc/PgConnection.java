@@ -182,6 +182,7 @@ public class PgConnection implements BaseConnection {
   private final LruCache<FieldMetadata.Key, FieldMetadata> fieldMetadataCache;
 
   private ClusterAwareLoadBalancer loadBalancer;
+  private boolean disableNestLoopForMetadataSQLs;
 
   private final @Nullable String xmlFactoryFactoryClass;
   private @Nullable PGXmlFactoryFactory xmlFactoryFactory;
@@ -342,6 +343,7 @@ public class PgConnection implements BaseConnection {
     replicationConnection = PGProperty.REPLICATION.get(info) != null;
 
     xmlFactoryFactoryClass = PGProperty.XML_FACTORY_FACTORY.get(info);
+    disableNestLoopForMetadataSQLs = Boolean.parseBoolean(System.getProperty("ybdb.pgdbmetadata.nestedloop.disable"));
   }
 
   private static ReadOnlyBehavior getReadOnlyBehavior(String property) {
@@ -776,6 +778,10 @@ public class PgConnection implements BaseConnection {
 
   public void setLoadBalancer(ClusterAwareLoadBalancer lb) {
     this.loadBalancer = lb;
+  }
+
+  public boolean getDisableNestLoopForMetadataSQLs() {
+    return disableNestLoopForMetadataSQLs;
   }
 
   @Override
