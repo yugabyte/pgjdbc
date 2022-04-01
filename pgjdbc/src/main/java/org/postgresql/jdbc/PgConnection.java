@@ -343,7 +343,7 @@ public class PgConnection implements BaseConnection {
     replicationConnection = PGProperty.REPLICATION.get(info) != null;
 
     xmlFactoryFactoryClass = PGProperty.XML_FACTORY_FACTORY.get(info);
-    disableNestLoopForMetadataSQLs = Boolean.parseBoolean(System.getProperty("ybdb.pgdbmetadata.nestloop.disable"));
+    disableNestLoopForMetadataSQLs = Boolean.parseBoolean(System.getProperty("ybdb.pgdbmetadata.nestedloop.disable"));
   }
 
   private static ReadOnlyBehavior getReadOnlyBehavior(String property) {

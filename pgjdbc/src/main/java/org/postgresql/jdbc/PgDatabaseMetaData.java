@@ -54,7 +54,7 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
   private int nameDataLength = 0; // length for name datatype
   private int indexMaxKeys = 0; // maximum number of keys in an index.
 
-  private static final String DISABLE_NEST_LOOP_HINT_STRING = "/*+set(enable_nestloop off)*/ ";
+  private static final String DISABLE_NESTED_LOOP_HINT_STRING = "/*+set(enable_nestloop off)*/ ";
 
   protected int getMaxIndexKeys() throws SQLException {
     if (indexMaxKeys == 0) {
@@ -1273,7 +1273,7 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
     String orderby;
     String useSchemas = "SCHEMAS";
     if (connection.getDisableNestLoopForMetadataSQLs()) {
-      select = DISABLE_NEST_LOOP_HINT_STRING;
+      select = DISABLE_NESTED_LOOP_HINT_STRING;
     }
     select += "SELECT NULL AS TABLE_CAT, n.nspname AS TABLE_SCHEM, c.relname AS TABLE_NAME, "
              + " CASE n.nspname ~ '^pg_' OR n.nspname = 'information_schema' "
@@ -1534,7 +1534,7 @@ public class PgDatabaseMetaData implements DatabaseMetaData {
     // column name outside so we correctly count the other columns.
     //
     if (connection.getDisableNestLoopForMetadataSQLs()) {
-      sql = DISABLE_NEST_LOOP_HINT_STRING;
+      sql = DISABLE_NESTED_LOOP_HINT_STRING;
     }
     if (connection.haveMinimumServerVersion(ServerVersion.v8_4)) {
       sql += "SELECT * FROM (";
