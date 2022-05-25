@@ -287,4 +287,12 @@ public class ClusterAwareLoadBalancer {
       System.out.println(e.getKey() + " - " + e.getValue());
     }
   }
+
+  public synchronized Map getHostToConnMapCopy() {
+    Map<String, Integer> newMap = new HashMap<>();
+    for (Map.Entry<String, Integer> e : hostToNumConnMap.entrySet()) {
+      newMap.put(e.getKey(), e.getValue());
+    }
+    return newMap;
+  }
 }

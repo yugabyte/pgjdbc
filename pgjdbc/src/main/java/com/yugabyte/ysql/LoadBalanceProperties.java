@@ -129,7 +129,7 @@ public class LoadBalanceProperties {
           "This method is expected to be called only when load-balance is true");
     }
     ClusterAwareLoadBalancer ld = null;
-    if (placements == null) {
+    if (placements == null || placements.trim().isEmpty()) {
       // return base class conn manager.
       ld = CONNECTION_MANAGER_MAP.get(SIMPLE_LB);
       if (ld == null) {
