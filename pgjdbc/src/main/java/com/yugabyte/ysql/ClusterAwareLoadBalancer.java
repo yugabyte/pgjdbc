@@ -28,7 +28,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class ClusterAwareLoadBalancer {
+public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
 
@@ -120,6 +120,7 @@ public class ClusterAwareLoadBalancer {
 
   public static boolean forceRefresh = false;
 
+  @Override
   public boolean needsRefresh() {
     if (forceRefresh) {
       LOGGER.log(Level.FINE, getLoadBalancerType() + ": Force Refresh is set to true");
@@ -221,10 +222,12 @@ public class ClusterAwareLoadBalancer {
     }
   }
 
-  protected String getLoadBalancerType() {
+  @Override
+  public String getLoadBalancerType() {
     return "ClusterAwareLoadBalancer";
   }
 
+  @Override
   public synchronized boolean refresh(Connection conn) throws SQLException {
     if (!needsRefresh()) {
       return true;

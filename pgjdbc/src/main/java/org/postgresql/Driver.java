@@ -23,6 +23,9 @@ package org.postgresql;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
+import com.yugabyte.ysql.DBTabletAwareLoadBalancer;
+import com.yugabyte.ysql.LoadBalancer;
+
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.DriverInfo;
 import org.postgresql.util.ExpressionProperties;
@@ -480,14 +483,14 @@ public class Driver implements java.sql.Driver {
    * thread without enforcing a timeout, regardless of any timeout specified in the properties.
    *
    * @param url the original URL
-   * @param props the parsed/defaulted connection properties
+   * @param properties the parsed/defaulted connection properties
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
   private static Connection makeConnection(String url, Properties properties) throws SQLException {
     LoadBalanceProperties lbprops = new LoadBalanceProperties(url, properties);
-    if (lbprops.hasLoadBalance()) {
-      Connection conn = getConnectionBalanced(lbprops);
+    if (lbprops.hasLoadBalance() || lbprops.hasTabletAwareRouting()) {
+      Connection conn = getOptimalConnection(lbprops);
       if (conn != null) {
         return conn;
       }
@@ -496,12 +499,65 @@ public class Driver implements java.sql.Driver {
     // Cleanup extra properties used for load balancing
     url = lbprops.getStrippedURL();
     properties = lbprops.getStrippedProperties();
-    return new PgConnection(hostSpecs(properties), user(properties), database(properties), properties, url);
+    return new PgConnection(hostSpecs(properties), user(properties), database(properties),
+        properties, url);
   }
 
-  private static Connection getConnectionBalanced(LoadBalanceProperties lbprops) {
+  private static Connection getOptimalConnection(LoadBalanceProperties lbprops) {
+    LoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
+    if (loadBalancer instanceof ClusterAwareLoadBalancer) {
+      return getConnectionBalanced((ClusterAwareLoadBalancer) loadBalancer, lbprops);
+    } else if (loadBalancer instanceof DBTabletAwareLoadBalancer) {
+      return getTabletLeaderConnection((DBTabletAwareLoadBalancer) loadBalancer, lbprops);
+    }
+    return null;
+  }
+
+  // todo Move to DBTabletAwareLoadBalancer
+  private static Connection getTabletLeaderConnection(DBTabletAwareLoadBalancer loadBalancer,
+      LoadBalanceProperties lbprops) {
+    Connection newConnection = null;
+    Connection controlConnection = null;
+    String dbName = database(lbprops.getOriginalProperties());
+    try {
+      if (loadBalancer.needsRefresh()) {
+        HostSpec[] hspec = hostSpecs(lbprops.getOriginalProperties());
+        controlConnection = new PgConnection(
+            hspec, user(lbprops.getOriginalProperties()),
+            dbName, lbprops.getStrippedProperties(),
+            lbprops.getStrippedURL());
+
+        loadBalancer.refresh(controlConnection);
+        controlConnection.close();
+      }
+
+      String leaderNode = loadBalancer.getLeaderNode(dbName);
+      if (leaderNode == null || leaderNode.isEmpty()) {
+        // todo Connect to a follower? Or it may mean the database is NOT colocated
+        LOGGER.warning("Did not find leader for " + dbName);
+        Properties props = lbprops.getStrippedProperties();
+        newConnection = new PgConnection(
+            hostSpecs(props), user(lbprops.getOriginalProperties()), database(props), props,
+            lbprops.getStrippedURL());
+      } else {
+        Properties props = lbprops.getStrippedProperties();
+        props.setProperty("PGHOST", leaderNode);
+        // todo Decide if we need to use above value or its public_ip for connecting to it.
+        // todo Get the port for this leader node.
+        newConnection = new PgConnection(
+            hostSpecs(props), user(lbprops.getOriginalProperties()), database(props), props,
+            lbprops.getStrippedURL());
+      }
+    } catch (Exception e) { // todo handle
+      System.out.println("Exception in getTabletLeaderConnection() " + e);
+    }
+    return newConnection;
+  }
+
+  // todo Better to move this under ClusterAwareLoadBalancer
+  private static Connection getConnectionBalanced(ClusterAwareLoadBalancer loadBalancer,
+      LoadBalanceProperties lbprops) {
     LOGGER.log(Level.FINE, "GetConnectionBalanced called");
-    ClusterAwareLoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
     Properties props = lbprops.getStrippedProperties();
     String url = lbprops.getStrippedURL();
     Set<String> unreachableHosts = loadBalancer.getUnreachableHosts();

@@ -22,6 +22,7 @@ public class LoadBalanceProperties {
   private static final String SIMPLE_LB = "simple";
   private static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
   private static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
+  public static final String TABLET_AWARE_ROUTING_PROPERTY_KEY = "tablet-aware-routing";
   private static final String PROPERTY_SEP = "&";
   private static final String EQUALS = "=";
 
@@ -37,6 +38,7 @@ public class LoadBalanceProperties {
   private final Properties originalProperties;
   private final Properties strippedProperties;
   private boolean hasLoadBalance;
+  private boolean hasTabletAwareRouting;
   private final String ybURL;
   private String placements = null;
 
@@ -46,6 +48,7 @@ public class LoadBalanceProperties {
     strippedProperties = (Properties) origProperties.clone();
     strippedProperties.remove(LOAD_BALANCE_PROPERTY_KEY);
     strippedProperties.remove(TOPOLOGY_AWARE_PROPERTY_KEY);
+    strippedProperties.remove(TABLET_AWARE_ROUTING_PROPERTY_KEY);
     ybURL = processURLAndProperties();
   }
 
@@ -74,6 +77,14 @@ public class LoadBalanceProperties {
           continue;
         }
         placements = lbParts[1];
+      } else if (part.startsWith(TABLET_AWARE_ROUTING_PROPERTY_KEY + EQUALS)) {
+        String[] lbParts = part.split(EQUALS);
+        if (lbParts.length < 2) {
+          LOGGER.log(Level.WARNING,
+              "No value provided for " + TABLET_AWARE_ROUTING_PROPERTY_KEY + ". Ignoring it.");
+          continue;
+        }
+        hasTabletAwareRouting = Boolean.valueOf(lbParts[1]);
       } else {
         if (sb.toString().contains("?")) {
           sb.append(PROPERTY_SEP);
@@ -95,6 +106,12 @@ public class LoadBalanceProperties {
         String propValue = originalProperties.getProperty(TOPOLOGY_AWARE_PROPERTY_KEY);
         placements = propValue;
       }
+      if (originalProperties.containsKey(TABLET_AWARE_ROUTING_PROPERTY_KEY)) {
+        String propValue = originalProperties.getProperty(TABLET_AWARE_ROUTING_PROPERTY_KEY);
+        if (Boolean.valueOf(propValue)) {
+          hasLoadBalance = true;
+        }
+      }
     }
     return sb.toString();
   }
@@ -115,6 +132,10 @@ public class LoadBalanceProperties {
     return hasLoadBalance;
   }
 
+  public boolean hasTabletAwareRouting() {
+    return this.hasTabletAwareRouting;
+  }
+
   public String getPlacements() {
     return placements;
   }
@@ -123,10 +144,14 @@ public class LoadBalanceProperties {
     return ybURL;
   }
 
-  public ClusterAwareLoadBalancer getAppropriateLoadBalancer() {
-    if (!hasLoadBalance) {
+  public LoadBalancer getAppropriateLoadBalancer() {
+    if (!hasLoadBalance && !hasTabletAwareRouting) {
       throw new IllegalStateException(
-          "This method is expected to be called only when load-balance is true");
+          "This method is expected to be called only when either " + LOAD_BALANCE_PROPERTY_KEY +
+              " or " + TABLET_AWARE_ROUTING_PROPERTY_KEY + " is true");
+    }
+    if (hasTabletAwareRouting) {
+      return DBTabletAwareLoadBalancer.getInstance();
     }
     ClusterAwareLoadBalancer ld = null;
     if (placements == null) {

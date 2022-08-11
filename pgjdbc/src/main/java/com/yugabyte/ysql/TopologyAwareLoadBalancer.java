@@ -67,7 +67,8 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
     }
   }
 
-  protected String getLoadBalancerType() {
+  @Override
+  public String getLoadBalancerType() {
     return "TopologyAwareLoadBalancer";
   }
 
