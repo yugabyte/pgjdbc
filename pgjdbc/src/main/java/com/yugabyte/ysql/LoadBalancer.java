@@ -8,5 +8,6 @@ public interface LoadBalancer {
   public String getLoadBalancerType();
   public boolean needsRefresh();
   public boolean refresh(Connection conn) throws SQLException;
+  public Connection getConnection(LoadBalanceProperties lbProps, String user, String dbName);
 
 }

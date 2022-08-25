@@ -1,11 +1,17 @@
 package com.yugabyte.ysql;
 
+import org.postgresql.jdbc.PgConnection;
+import org.postgresql.util.HostSpec;
+
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static org.postgresql.Driver.hostSpecs;
 
 public class DBTabletAwareLoadBalancer implements LoadBalancer {
 
@@ -121,6 +127,47 @@ public class DBTabletAwareLoadBalancer implements LoadBalancer {
   public String getLeaderNode(String db) {
     return dbTabletInfoMap.get(db).getLeader();
   }
+
+  @Override
+  public Connection getConnection(LoadBalanceProperties loadBalanceProperties,
+      String user, String dbName) {
+    Connection newConnection = null;
+    Connection controlConnection = null;
+    try {
+      if (needsRefresh()) {
+        HostSpec[] hspec = hostSpecs(loadBalanceProperties.getOriginalProperties());
+        controlConnection = new PgConnection(
+            hspec, user,
+            dbName, loadBalanceProperties.getStrippedProperties(),
+            loadBalanceProperties.getStrippedURL());
+
+        refresh(controlConnection);
+        controlConnection.close();
+      }
+
+      String leaderNode = getLeaderNode(dbName);
+      if (leaderNode == null || leaderNode.isEmpty()) {
+        // todo Connect to a follower? Or it may mean the database is NOT colocated
+        LOGGER.warning("Did not find leader for " + dbName);
+        Properties props = loadBalanceProperties.getStrippedProperties();
+        newConnection = new PgConnection(
+            hostSpecs(props), user, dbName, props,
+            loadBalanceProperties.getStrippedURL());
+      } else {
+        Properties props = loadBalanceProperties.getStrippedProperties();
+        props.setProperty("PGHOST", leaderNode);
+        // todo Decide if we need to use above value or its public_ip for connecting to it.
+        // todo Get the port for this leader node.
+        newConnection = new PgConnection(
+            hostSpecs(props), user, dbName, props,
+            loadBalanceProperties.getStrippedURL());
+      }
+    } catch (Exception e) { // todo handle
+      System.out.println("Exception in getTabletLeaderConnection() " + e);
+    }
+    return newConnection;
+  }
+
 }
 
 class DBTabletInfo {
