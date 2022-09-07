@@ -8,47 +8,23 @@ package org.postgresql.core.v3;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
+import org.postgresql.Driver;
 import org.postgresql.PGProperty;
 import org.postgresql.copy.CopyIn;
 import org.postgresql.copy.CopyOperation;
 import org.postgresql.copy.CopyOut;
-import org.postgresql.core.CommandCompleteParser;
-import org.postgresql.core.Encoding;
-import org.postgresql.core.EncodingPredictor;
-import org.postgresql.core.Field;
-import org.postgresql.core.NativeQuery;
-import org.postgresql.core.Oid;
-import org.postgresql.core.PGBindException;
-import org.postgresql.core.PGStream;
-import org.postgresql.core.ParameterList;
-import org.postgresql.core.Parser;
-import org.postgresql.core.Query;
-import org.postgresql.core.QueryExecutor;
-import org.postgresql.core.QueryExecutorBase;
-import org.postgresql.core.ReplicationProtocol;
-import org.postgresql.core.ResultCursor;
-import org.postgresql.core.ResultHandler;
-import org.postgresql.core.ResultHandlerBase;
-import org.postgresql.core.ResultHandlerDelegate;
-import org.postgresql.core.SqlCommand;
-import org.postgresql.core.SqlCommandType;
-import org.postgresql.core.TransactionState;
-import org.postgresql.core.Tuple;
+import org.postgresql.core.*;
 import org.postgresql.core.v3.adaptivefetch.AdaptiveFetchCache;
 import org.postgresql.core.v3.replication.V3ReplicationProtocol;
 import org.postgresql.jdbc.AutoSave;
 import org.postgresql.jdbc.BatchResultHandler;
 import org.postgresql.jdbc.TimestampUtils;
-import org.postgresql.util.ByteStreamWriter;
-import org.postgresql.util.GT;
-import org.postgresql.util.PSQLException;
-import org.postgresql.util.PSQLState;
-import org.postgresql.util.PSQLWarning;
-import org.postgresql.util.ServerErrorMessage;
+import org.postgresql.util.*;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.awt.datatransfer.FlavorEvent;
 import java.io.IOException;
 import java.lang.ref.PhantomReference;
 import java.lang.ref.Reference;
@@ -59,17 +35,7 @@ import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.Set;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
@@ -157,6 +123,8 @@ public class QueryExecutorImpl extends QueryExecutorBase {
 
   private final AdaptiveFetchCache adaptiveFetchCache;
 
+  private Properties originalProperties;
+
   @SuppressWarnings({"assignment.type.incompatible", "argument.type.incompatible",
       "method.invocation.invalid"})
   public QueryExecutorImpl(PGStream pgStream, String user, String database,
@@ -171,6 +139,7 @@ public class QueryExecutorImpl extends QueryExecutorBase {
     // assignment.type.incompatible, argument.type.incompatible
     this.replicationProtocol = new V3ReplicationProtocol(this, pgStream);
     readStartupMessages();
+    this.originalProperties = info;
   }
 
   @Override
@@ -2472,6 +2441,7 @@ public class QueryExecutorImpl extends QueryExecutorBase {
           }
           pendingBindQueue.clear(); // No more BindComplete messages expected.
           pendingExecuteQueue.clear(); // No more query executions expected.
+          checkLeaderTabletMovementAndTakeAppropriateAction();
           break;
 
         case 'G': // CopyInResponse
@@ -2520,6 +2490,48 @@ public class QueryExecutorImpl extends QueryExecutorBase {
     }
   }
 
+  private void checkLeaderTabletMovementAndTakeAppropriateAction() {
+    if (hasLeaderMoved()) {
+      String newLeader = getLeaderNode();
+      resetLeaderMoved();
+
+      if (newLeader == null || newLeader.isEmpty()) {
+        LOGGER.log(Level.WARNING, "No node found hosting the leader tablet");
+        return;
+      }
+      try {
+        Properties props = new Properties();
+
+        for(Object k : this.originalProperties.keySet()) {
+          props.setProperty(k.toString(), this.originalProperties.getProperty(k.toString()));
+        }
+
+        props.setProperty("PGHOST", newLeader);
+        HostSpec[] hostSpecs = Driver.hostSpecs(props);
+        QueryExecutor qe = ConnectionFactory.openConnection(hostSpecs, getUser(), getDatabase(), props);
+        qe.setOwner(this.getOwner());
+        this.getOwner().setQueryExecutor(qe);
+        LOGGER.log(Level.FINE,"Connected to new node: {0}", newLeader);
+        close();
+        LOGGER.log(Level.FINE,"Closed previous QueryExecutorImpl instance");
+      } catch (Exception e) {
+        // We could not connect to the new node. Continue with existing QueryExecutor/PGStream
+        LOGGER.log(Level.WARNING, "Could not connect to new leader tablet node {0} , error: {1}", new Object[]{newLeader, e});
+      }
+    }
+  }
+
+  private void resetLeaderMoved() {
+    System.setProperty("SET_LEADER_NODE_MOVED", "false");
+  }
+
+  private boolean hasLeaderMoved() {
+    return Boolean.valueOf(System.getProperty("SET_LEADER_NODE_MOVED", "false"));
+  }
+
+  private String getLeaderNode() {
+    return System.getProperty("TEST_NEW_LEADER_NODE");
+  }
   /**
    * Ignore the response message by reading the message length and skipping over those bytes in the
    * communication stream.

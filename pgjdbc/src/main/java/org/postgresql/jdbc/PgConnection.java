@@ -124,7 +124,7 @@ public class PgConnection implements BaseConnection {
   private @Nullable Throwable openStackTrace;
 
   /* Actual network handler */
-  private final QueryExecutor queryExecutor;
+  private QueryExecutor queryExecutor;
 
   /* Query that runs COMMIT */
   private final Query commitQuery;
@@ -242,6 +242,7 @@ public class PgConnection implements BaseConnection {
 
     // Now make the initial connection and set up local state
     this.queryExecutor = ConnectionFactory.openConnection(hostSpecs, user, database, info);
+    this.queryExecutor.setOwner(this);
 
     // WARNING for unsupported servers (8.1 and lower are not supported)
     if (LOGGER.isLoggable(Level.WARNING) && !haveMinimumServerVersion(ServerVersion.v8_2)) {
@@ -465,6 +466,10 @@ public class PgConnection implements BaseConnection {
 
   public QueryExecutor getQueryExecutor() {
     return queryExecutor;
+  }
+
+  public void setQueryExecutor(QueryExecutor qe) {
+    this.queryExecutor = qe;
   }
 
   public ReplicationProtocol getReplicationProtocol() {

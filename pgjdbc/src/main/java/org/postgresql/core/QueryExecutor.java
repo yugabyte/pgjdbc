@@ -9,10 +9,7 @@ package org.postgresql.core;
 import org.postgresql.PGNotification;
 import org.postgresql.copy.CopyOperation;
 import org.postgresql.core.v3.TypeTransferModeRegistry;
-import org.postgresql.jdbc.AutoSave;
-import org.postgresql.jdbc.BatchResultHandler;
-import org.postgresql.jdbc.EscapeSyntaxCallMode;
-import org.postgresql.jdbc.PreferQueryMode;
+import org.postgresql.jdbc.*;
 import org.postgresql.util.HostSpec;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -560,4 +557,9 @@ public interface QueryExecutor extends TypeTransferModeRegistry {
    *                      Portal class.
    */
   void removeQueryFromAdaptiveFetchCache(boolean adaptiveFetch, ResultCursor cursor);
+
+
+  void setOwner(PgConnection pgConnection);
+
+  PgConnection getOwner();
 }

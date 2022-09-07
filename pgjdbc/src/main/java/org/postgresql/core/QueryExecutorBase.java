@@ -9,6 +9,7 @@ import org.postgresql.PGNotification;
 import org.postgresql.PGProperty;
 import org.postgresql.jdbc.AutoSave;
 import org.postgresql.jdbc.EscapeSyntaxCallMode;
+import org.postgresql.jdbc.PgConnection;
 import org.postgresql.jdbc.PreferQueryMode;
 import org.postgresql.util.HostSpec;
 import org.postgresql.util.LruCache;
@@ -36,6 +37,7 @@ public abstract class QueryExecutorBase implements QueryExecutor {
   protected final PGStream pgStream;
   private final String user;
   private final String database;
+  private PgConnection owner;
   private final int cancelSignalTimeout;
 
   private int cancelPid;
@@ -118,6 +120,17 @@ public abstract class QueryExecutorBase implements QueryExecutor {
   public String getUser() {
     return user;
   }
+
+  @Override
+  public void setOwner(PgConnection pgConnection) {
+    this.owner = pgConnection;
+  }
+
+  @Override
+  public PgConnection getOwner() {
+    return this.owner;
+  }
+
 
   @Override
   public String getDatabase() {
