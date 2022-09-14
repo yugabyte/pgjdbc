@@ -19,23 +19,32 @@ import java.util.logging.Level;
 public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   private final String placements;
   private final Set<CloudPlacement> allowedPlacements;
+  private ArrayList<Set<CloudPlacement>> fallbackPlacements;
+  private ArrayList<ArrayList<String>> fallbackPrivateIPs;
+  private ArrayList<ArrayList<String>> fallbackPublicIPs;
+  private final byte PRIMARY = -1;
+  private byte currentPlacementLevel = PRIMARY;
 
-  public TopologyAwareLoadBalancer(String placementvalues) {
+  public TopologyAwareLoadBalancer(String placementvalues, String[] fallbackPlacements) {
     placements = placementvalues;
     allowedPlacements = new HashSet<>();
-    populatePlacementSet();
+    populatePlacementSet(placements, allowedPlacements);
+    if (fallbackPlacements != null && fallbackPlacements.length > 0) {
+      populateFallbackPlacementSet(fallbackPlacements);
+    }
   }
 
   protected String loadBalancingNodes() {
     return placements;
   }
 
-  private void populatePlacementSet() {
+  private void populatePlacementSet(String placements, Set<CloudPlacement> allowedPlacements) {
     String[] placementstrings = placements.split(",");
     for (String pl : placementstrings) {
       String[] placementParts = pl.split("\\.");
       if (placementParts.length != 3) {
         // Log a warning and return.
+        // todo This should ideally happen earlier so that we may fallback to non-load-balanced behaviour.
         LOGGER.log(Level.WARNING, getLoadBalancerType() + ": "
             + "Ignoring malformed topology-key property value: " + pl);
         continue;
@@ -45,6 +54,21 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       LOGGER.log(Level.FINE, getLoadBalancerType() + ": Adding placement " + cp + " to allowed "
           + "list");
       allowedPlacements.add(cp);
+    }
+  }
+
+  private void populateFallbackPlacementSet(String[] fallbackLevels) {
+    fallbackPlacements = new ArrayList<Set<CloudPlacement>>(fallbackLevels.length);
+    for (String fl : fallbackLevels) {
+      Set<CloudPlacement> allowedPlacements = new HashSet<CloudPlacement>();
+      populatePlacementSet(fl, allowedPlacements);
+      fallbackPlacements.add(allowedPlacements);
+    }
+    fallbackPrivateIPs = new ArrayList<ArrayList<String>>(fallbackPlacements.size());
+    fallbackPublicIPs = new ArrayList<ArrayList<String>>(fallbackPlacements.size());
+    for (int i = 0; i < fallbackPlacements.size(); i++) {
+      fallbackPrivateIPs.add(new ArrayList<String>());
+      fallbackPublicIPs.add(new ArrayList<String>());
     }
   }
 
@@ -61,10 +85,27 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
         currentPublicIps.add(publicIp);
       }
     } else {
+      if (fallbackPlacements != null && !fallbackPlacements.isEmpty()) {
+        for (int i = 0; i < fallbackPlacements.size(); i++) {
+          Set<CloudPlacement> pl = fallbackPlacements.get(i);
+          if (pl.contains(cp)) {
+            fallbackPrivateIPs.get(i).add(host);
+            if (!publicIp.trim().isEmpty()) {
+              fallbackPublicIPs.get(i).add(publicIp);
+            }
+            return;
+          }
+        }
+      }
       LOGGER.log(Level.FINE,
           getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
               + " returned contains false for cp: " + cp);
     }
+  }
+
+  @Override
+  protected boolean checkFallback() {
+    return !fallbackPlacements.isEmpty();
   }
 
   protected String getLoadBalancerType() {
@@ -101,6 +142,24 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
 
     public String toString() {
       return "Placement: " + cloud + "." + region + "." + zone;
+    }
+  }
+
+  static class FallbackDetails {
+    private Set<CloudPlacement> placements;
+    private ArrayList<String> currentPrivateIPs;
+    private ArrayList<String> currentPublicIPs;
+
+    public Set<CloudPlacement> getPlacements() {
+      return placements;
+    }
+
+    public ArrayList<String> getCurrentPrivateIPs() {
+      return currentPrivateIPs;
+    }
+
+    public ArrayList<String> getCurrentPublicIPs() {
+      return currentPublicIPs;
     }
   }
 }

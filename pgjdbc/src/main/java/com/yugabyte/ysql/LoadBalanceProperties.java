@@ -24,6 +24,7 @@ public class LoadBalanceProperties {
   private static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
   private static final String PROPERTY_SEP = "&";
   private static final String EQUALS = "=";
+  private static final String FALLBACK_DELIMITER = "->";
 
   private static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
@@ -39,6 +40,7 @@ public class LoadBalanceProperties {
   private boolean hasLoadBalance;
   private final String ybURL;
   private String placements = null;
+  private String[] fallbackPlacements = null;
 
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
@@ -69,11 +71,16 @@ public class LoadBalanceProperties {
         }
       } else if (part.startsWith(topologyKey)) {
         String[] lbParts = part.split(EQUALS);
-        if (lbParts.length < 2) {
-          LOGGER.log(Level.WARNING, "No value provided for topology keys. Ignoring it.");
+        if (lbParts.length != 2) {
+          LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
           continue;
         }
-        placements = lbParts[1];
+        String[] values = lbParts[1].split(FALLBACK_DELIMITER);
+        placements = values[0];
+        for (int i = 1; i < values.length; i++) {
+          if (fallbackPlacements == null) fallbackPlacements = new String[values.length - 1];
+          fallbackPlacements[i-1] = values[i];
+        }
       } else {
         if (sb.toString().contains("?")) {
           sb.append(PROPERTY_SEP);
@@ -119,6 +126,10 @@ public class LoadBalanceProperties {
     return placements;
   }
 
+  public boolean hasFallback() {
+    return fallbackPlacements != null && fallbackPlacements.length > 0;
+  }
+
   public String getStrippedURL() {
     return ybURL;
   }
@@ -147,7 +158,7 @@ public class LoadBalanceProperties {
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(placements);
           if (ld == null) {
-            ld = new TopologyAwareLoadBalancer(placements);
+            ld = new TopologyAwareLoadBalancer(placements, fallbackPlacements);
             CONNECTION_MANAGER_MAP.put(placements, ld);
           }
         }

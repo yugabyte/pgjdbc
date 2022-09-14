@@ -204,8 +204,8 @@ public class ClusterAwareLoadBalancer {
       if (publicHosts.isEmpty()) {
         useHostColumn = Boolean.TRUE;
       }
-      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Either private or public should have "
-          + "matched with one of the servers. Using private addresses.");
+      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Either private or public address should "
+          + "have matched with one of the servers. Using private addresses.");
       return privateHosts;
     }
     ArrayList<String> currentHosts = useHostColumn ? privateHosts : publicHosts;
@@ -233,7 +233,8 @@ public class ClusterAwareLoadBalancer {
     long currTime = System.currentTimeMillis();
     servers = getCurrentServers(conn);
     if (servers == null) {
-      return false;
+      // Check fallback servers
+      return checkFallback();
     }
     lastServerListFetchTime = currTime;
     unreachableHosts.clear();
@@ -245,6 +246,10 @@ public class ClusterAwareLoadBalancer {
     return true;
   }
 
+  protected boolean checkFallback() {
+    return false; // no fallback for ClusterAwareLoadBalancer
+  }
+
   public List<String> getServers() {
     return Collections.unmodifiableList(servers);
   }
@@ -253,7 +258,7 @@ public class ClusterAwareLoadBalancer {
     LOGGER.log(Level.FINE, getLoadBalancerType() + ": updating connection count for {0} by {1}",
         new String[]{host, String.valueOf(incDec)});
     Integer currentCount = hostToNumConnMap.get(host);
-    if (currentCount == 0 && incDec < 0) {
+    if ((currentCount == null || currentCount == 0) && incDec < 0) {
       return;
     }
     if (currentCount == null && incDec > 0) {

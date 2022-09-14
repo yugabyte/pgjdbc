@@ -480,7 +480,7 @@ public class Driver implements java.sql.Driver {
    * thread without enforcing a timeout, regardless of any timeout specified in the properties.
    *
    * @param url the original URL
-   * @param props the parsed/defaulted connection properties
+   * @param properties the parsed/defaulted connection properties
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
@@ -500,6 +500,22 @@ public class Driver implements java.sql.Driver {
   }
 
   private static Connection getConnectionBalanced(LoadBalanceProperties lbprops) {
+    Connection conn = getConnectionBalanced2(lbprops);
+    if (conn != null) {
+      return conn;
+    } else {
+      return getConnectionBalancedFallback(lbprops);
+    }
+  }
+
+  private static Connection getConnectionBalancedFallback(LoadBalanceProperties lbprops) {
+    ClusterAwareLoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
+    if (lbprops.hasFallback()) {
+    }
+    return null;
+  }
+
+  private static Connection getConnectionBalanced2(LoadBalanceProperties lbprops) {
     LOGGER.log(Level.FINE, "GetConnectionBalanced called");
     ClusterAwareLoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
     Properties props = lbprops.getStrippedProperties();
