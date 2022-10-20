@@ -1,9 +1,7 @@
 package com.yugabyte.ysql;
 
-import org.postgresql.PGProperty;
 import org.postgresql.core.PGStream;
 import org.postgresql.jdbc.PgConnection;
-import org.postgresql.ssl.PGjdbcHostnameVerifier;
 import org.postgresql.util.GT;
 import org.postgresql.util.HostSpec;
 import org.postgresql.util.PSQLException;
@@ -25,12 +23,11 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static org.postgresql.Driver.*;
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
-public class YBjdbcHostnameVerifier implements HostnameVerifier {
+public class YBManagedHostnameVerifier implements HostnameVerifier {
 
-  private static final Logger LOGGER = Logger.getLogger(YBjdbcHostnameVerifier.class.getName());
+  private static final Logger LOGGER = Logger.getLogger(YBManagedHostnameVerifier.class.getName());
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected Boolean useHostColumn = null;
 
@@ -45,7 +42,7 @@ public class YBjdbcHostnameVerifier implements HostnameVerifier {
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   private final PGStream stream;
 
-  public YBjdbcHostnameVerifier(Properties props, PGStream stream){
+  public YBManagedHostnameVerifier(Properties props, PGStream stream){
     this.originalProperties = props;
     this.stream= stream;
 
@@ -127,15 +124,17 @@ public class YBjdbcHostnameVerifier implements HostnameVerifier {
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
-    if(hostlist.contains(hostname))
+    if (hostlist.contains(hostname)) {
       return true;
-    else
+    }
+    else {
       return false;
+    }
 
 
   }
 
-  protected ArrayList<String> getCurrentServers(Connection conn) throws SQLException {
+  private ArrayList<String> getCurrentServers(Connection conn) throws SQLException {
     Statement st = conn.createStatement();
 
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
@@ -166,7 +165,12 @@ public class YBjdbcHostnameVerifier implements HostnameVerifier {
       String zone = rs.getString("zone");
       hostPortMap.put(host, port);
       hostPortMapPublic.put(publicHost, port);
-      updateCurrentHostList(currentPrivateIps, host, publicHost, cloud, region, zone);
+
+      currentPrivateIps.add(host);
+      if (!publicHost.trim().isEmpty()) {
+        currentPublicIps.add(publicHost);
+      }
+
       InetAddress hostInetAddr;
       InetAddress publicHostInetAddr;
       try {
@@ -190,28 +194,18 @@ public class YBjdbcHostnameVerifier implements HostnameVerifier {
         }
       }
     }
-    return getPrivateOrPublicServers(currentPrivateIps, currentPublicIps);
-  }
-  protected ArrayList<String> getPrivateOrPublicServers(ArrayList<String> privateHosts,
-      ArrayList<String> publicHosts) {
+
     if (useHostColumn == null) {
-      if (publicHosts.isEmpty()) {
+      if (currentPublicIps.isEmpty()) {
         useHostColumn = Boolean.TRUE;
       }
 
-      return privateHosts;
+      return currentPrivateIps;
     }
-    ArrayList<String> currentHosts = useHostColumn ? privateHosts : publicHosts
+    ArrayList<String> currentHosts = useHostColumn ? currentPrivateIps : currentPublicIps;
     return currentHosts;
   }
 
-  protected void updateCurrentHostList(ArrayList<String> currentPrivateIps, String host,
-      String publicIp, String cloud, String region, String zone) {
-    currentPrivateIps.add(host);
-    if (!publicIp.trim().isEmpty()) {
-      currentPublicIps.add(publicIp);
-    }
-  }
   private static HostSpec[] hostSpecs(Properties props) {
     String[] hosts = castNonNull(props.getProperty("PGHOST")).split(",");
     String[] ports = castNonNull(props.getProperty("PGPORT")).split(",");
