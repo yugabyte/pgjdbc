@@ -121,6 +121,7 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
     ArrayList<String> hostlist = new ArrayList<>();
     try {
       hostlist = getCurrentServers(controlConnection);
+      controlConnection.close();
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
