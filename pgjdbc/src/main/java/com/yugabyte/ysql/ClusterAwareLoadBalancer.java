@@ -239,8 +239,7 @@ public class ClusterAwareLoadBalancer {
     long currTime = System.currentTimeMillis();
     servers = getCurrentServers(conn);
     if (servers == null) {
-      // Check fallback servers
-      return checkFallback();
+      return false;
     }
     lastServerListFetchTime = currTime;
     unreachableHosts.clear();
@@ -250,10 +249,6 @@ public class ClusterAwareLoadBalancer {
       }
     }
     return true;
-  }
-
-  protected boolean checkFallback() {
-    return false; // no fallback for ClusterAwareLoadBalancer
   }
 
   public List<String> getServers() {

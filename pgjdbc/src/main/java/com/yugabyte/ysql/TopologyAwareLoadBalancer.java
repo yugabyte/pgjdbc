@@ -56,7 +56,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
     String[] values = placements.split(LOCATIONS_DELIMITER);
     for (String value : values) {
       String[] v = value.split(PREFERENCE_DELIMITER);
-      if (v.length > 2) {
+      if (v.length > 2 || value.endsWith(":")) {
         throw new IllegalArgumentException("Invalid value part for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
       }
       if (v.length == 1) {
@@ -126,10 +126,6 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       remainingHosts.add(host);
       ArrayList<String> remainingPublicIPs = fallbackPublicIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
       remainingPublicIPs.add(publicIp);
-//       otherNodesPrivateIPs.add(host);
-//       if (!publicIp.trim().isEmpty()) {
-//         otherNodesPublicIPs.add(publicIp);
-//       }
       LOGGER.log(Level.FINE,
           getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
               + " returned contains false for cp: " + cp);
@@ -153,12 +149,6 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
     // If nothing works out, let it fallback to entire cluster nodes
     return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(REST_OF_CLUSTER),
         fallbackPublicIPs.get(REST_OF_CLUSTER));
-//     return super.getPrivateOrPublicServers(otherNodesPrivateIPs, otherNodesPublicIPs);
-  }
-
-  @Override
-  protected boolean checkFallback() {
-    return allowedPlacements.size() > 1;
   }
 
   protected String getLoadBalancerType() {

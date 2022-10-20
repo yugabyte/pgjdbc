@@ -500,22 +500,6 @@ public class Driver implements java.sql.Driver {
   }
 
   private static Connection getConnectionBalanced(LoadBalanceProperties lbprops) {
-    Connection conn = getConnectionBalanced2(lbprops);
-    if (conn != null) {
-      return conn;
-    } else {
-      return getConnectionBalancedFallback(lbprops);
-    }
-  }
-
-  private static Connection getConnectionBalancedFallback(LoadBalanceProperties lbprops) {
-    ClusterAwareLoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
-    if (lbprops.hasFallback()) {
-    }
-    return null;
-  }
-
-  private static Connection getConnectionBalanced2(LoadBalanceProperties lbprops) {
     LOGGER.log(Level.FINE, "GetConnectionBalanced called");
     ClusterAwareLoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
     Properties props = lbprops.getStrippedProperties();

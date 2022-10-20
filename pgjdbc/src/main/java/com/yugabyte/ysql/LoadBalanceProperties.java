@@ -45,7 +45,6 @@ public class LoadBalanceProperties {
   private final String ybURL;
   private String placements = null;
   private int refreshInterval = -1;
-//   private Map<Integer, Set<TopologyAwareLoadBalancer.CloudPlacement>> fallbackPlacements = null;
 
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
@@ -91,17 +90,10 @@ public class LoadBalanceProperties {
         try {
           refreshInterval = Integer.parseInt(lbParts[1]);
           if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
-            refreshInterval = -1;
+            refreshInterval = DEFAULT_REFRESH_INTERVAL;
           }
         } catch (NumberFormatException nfe) {
-          refreshInterval = -1;
-        }
-        if (refreshInterval == -1) {
-//           String interval = System.getProperty("", "300");
-//           refreshInterval = Integer.parseInt(interval);
-//           if (refreshInterval < 0 || refreshInterval > 600) {
-            refreshInterval = DEFAULT_REFRESH_INTERVAL;
-//           }
+          refreshInterval = DEFAULT_REFRESH_INTERVAL;
         }
       } else {
         if (sb.toString().contains("?")) {
@@ -148,12 +140,6 @@ public class LoadBalanceProperties {
     return placements;
   }
 
-  public boolean hasFallback() {
-//     return fallbackPlacements != null && fallbackPlacements.size() > 0;
-    // todo do we need it in this class?
-    return false;
-  }
-
   public String getStrippedURL() {
     return ybURL;
   }
@@ -182,9 +168,6 @@ public class LoadBalanceProperties {
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(placements);
           if (ld == null) {
-//             Set<TopologyAwareLoadBalancer.CloudPlacement> preferred = new HashSet<>();
-//             Map<Integer, Set<TopologyAwareLoadBalancer.CloudPlacement>> fallbacks = new HashMap<>();
-//             parseGeoLocations(preferred, fallbacks);
             ld = new TopologyAwareLoadBalancer(placements);
             CONNECTION_MANAGER_MAP.put(placements, ld);
           }
