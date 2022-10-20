@@ -37,7 +37,7 @@ public class TopologyAwareLoadBalanceExample extends UniformLoadBalanceExample{
     String controlPort = "5433";
 
     controlUrl = "jdbc:yugabytedb://" + controlHost
-      + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&topology-keys=cloud1.region1.zone1";
+      + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&topology-keys=cloud1.region1.zone1,cloud1.region1.zone2";
     if (debugLogging) {
       controlUrl = "jdbc:yugabytedb://" + controlHost
         + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true"

@@ -41,6 +41,7 @@ public class ClusterAwareLoadBalancer {
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   protected ArrayList<String> currentPublicIps = new ArrayList<>();
   protected Boolean useHostColumn = null;
+  protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
   public static ClusterAwareLoadBalancer instance() {
     return instance;
@@ -49,11 +50,14 @@ public class ClusterAwareLoadBalancer {
   public ClusterAwareLoadBalancer() {
   }
 
-  public static ClusterAwareLoadBalancer getInstance() {
+  public static ClusterAwareLoadBalancer getInstance(int refreshListSeconds) {
     if (instance == null) {
       synchronized (ClusterAwareLoadBalancer.class) {
         if (instance == null) {
           instance = new ClusterAwareLoadBalancer();
+          instance.refreshListSeconds =
+              refreshListSeconds > 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
+              refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
         }
       }
     }
@@ -98,7 +102,7 @@ public class ClusterAwareLoadBalancer {
       // Now we have exhausted the servers list which was populated with (private) host values.
       // So try connecting to the public_ips.
       ArrayList<String> newList = new ArrayList<String>();
-      newList.addAll(currentPublicIps);
+      newList.addAll(currentPublicIps); // todo try respective public ip list?
       if (!newList.isEmpty()) {
         useHostColumn = Boolean.FALSE;
         servers = newList;
@@ -115,8 +119,6 @@ public class ClusterAwareLoadBalancer {
         getLoadBalancerType() + ": Host chosen for new connection: " + chosenHost);
     return chosenHost;
   }
-
-  public static int refreshListSeconds = 300;
 
   public static boolean forceRefresh = false;
 
@@ -161,7 +163,7 @@ public class ClusterAwareLoadBalancer {
           PSQLState.UNKNOWN_STATE, e);
     }
 
-    currentPublicIps.clear();
+    clearHostIPLists();
     while (rs.next()) {
       String host = rs.getString("host");
       String publicHost = rs.getString("public_ip");
@@ -196,6 +198,10 @@ public class ClusterAwareLoadBalancer {
       }
     }
     return getPrivateOrPublicServers(currentPrivateIps, currentPublicIps);
+  }
+
+  protected void clearHostIPLists() {
+    currentPublicIps.clear();
   }
 
   protected ArrayList<String> getPrivateOrPublicServers(ArrayList<String> privateHosts,

@@ -12,19 +12,23 @@
 //
 package com.yugabyte.ysql;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class LoadBalanceProperties {
   private static final String SIMPLE_LB = "simple";
-  private static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
-  private static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
+  public static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
+  public static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
+  public static final String REFRESH_INTERVAL_KEY = "yb-servers-refresh-interval";
   private static final String PROPERTY_SEP = "&";
   private static final String EQUALS = "=";
-  private static final String FALLBACK_DELIMITER = "->";
+  public static final String LOCATIONS_DELIMITER = ",";
+  public static final String PREFERENCE_DELIMITER = ":";
+  public static final int MAX_PREFERENCE_VALUE = 10;
+  public static final int DEFAULT_REFRESH_INTERVAL = 300;
+  public static final int MAX_REFRESH_INTERVAL = 600;
+
 
   private static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
@@ -40,7 +44,8 @@ public class LoadBalanceProperties {
   private boolean hasLoadBalance;
   private final String ybURL;
   private String placements = null;
-  private String[] fallbackPlacements = null;
+  private int refreshInterval = -1;
+//   private Map<Integer, Set<TopologyAwareLoadBalancer.CloudPlacement>> fallbackPlacements = null;
 
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
@@ -58,6 +63,7 @@ public class LoadBalanceProperties {
     urlParts = urlParts[1].split(PROPERTY_SEP);
     String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
     String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
+    String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
     for (String part : urlParts) {
       if (part.startsWith(loadBalancerKey)) {
         String[] lbParts = part.split(EQUALS);
@@ -75,11 +81,27 @@ public class LoadBalanceProperties {
           LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
           continue;
         }
-        String[] values = lbParts[1].split(FALLBACK_DELIMITER);
-        placements = values[0];
-        for (int i = 1; i < values.length; i++) {
-          if (fallbackPlacements == null) fallbackPlacements = new String[values.length - 1];
-          fallbackPlacements[i-1] = values[i];
+        placements = lbParts[1];
+      } else if (part.startsWith(refreshIntervalKey)) {
+        String[] lbParts = part.split(EQUALS);
+        if (lbParts.length != 2) {
+          LOGGER.log(Level.WARNING, "No valid value provided for " + REFRESH_INTERVAL_KEY + ". Ignoring it.");
+          continue;
+        }
+        try {
+          refreshInterval = Integer.parseInt(lbParts[1]);
+          if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
+            refreshInterval = -1;
+          }
+        } catch (NumberFormatException nfe) {
+          refreshInterval = -1;
+        }
+        if (refreshInterval == -1) {
+//           String interval = System.getProperty("", "300");
+//           refreshInterval = Integer.parseInt(interval);
+//           if (refreshInterval < 0 || refreshInterval > 600) {
+            refreshInterval = DEFAULT_REFRESH_INTERVAL;
+//           }
         }
       } else {
         if (sb.toString().contains("?")) {
@@ -94,7 +116,7 @@ public class LoadBalanceProperties {
     if (originalProperties != null) {
       if (originalProperties.containsKey(LOAD_BALANCE_PROPERTY_KEY)) {
         String propValue = originalProperties.getProperty(LOAD_BALANCE_PROPERTY_KEY);
-        if (propValue.equals("true")) {
+        if (propValue.equalsIgnoreCase("true")) {
           hasLoadBalance = true;
         }
       }
@@ -127,7 +149,9 @@ public class LoadBalanceProperties {
   }
 
   public boolean hasFallback() {
-    return fallbackPlacements != null && fallbackPlacements.length > 0;
+//     return fallbackPlacements != null && fallbackPlacements.size() > 0;
+    // todo do we need it in this class?
+    return false;
   }
 
   public String getStrippedURL() {
@@ -147,7 +171,7 @@ public class LoadBalanceProperties {
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(SIMPLE_LB);
           if (ld == null) {
-            ld = ClusterAwareLoadBalancer.getInstance();
+            ld = ClusterAwareLoadBalancer.getInstance(refreshInterval);
             CONNECTION_MANAGER_MAP.put(SIMPLE_LB, ld);
           }
         }
@@ -158,7 +182,10 @@ public class LoadBalanceProperties {
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(placements);
           if (ld == null) {
-            ld = new TopologyAwareLoadBalancer(placements, fallbackPlacements);
+//             Set<TopologyAwareLoadBalancer.CloudPlacement> preferred = new HashSet<>();
+//             Map<Integer, Set<TopologyAwareLoadBalancer.CloudPlacement>> fallbacks = new HashMap<>();
+//             parseGeoLocations(preferred, fallbacks);
+            ld = new TopologyAwareLoadBalancer(placements);
             CONNECTION_MANAGER_MAP.put(placements, ld);
           }
         }
