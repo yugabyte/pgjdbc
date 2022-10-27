@@ -13,10 +13,10 @@
 
 package com.yugabyte.ysql;
 
+import static com.yugabyte.ysql.LoadBalanceProperties.*;
+
 import java.util.*;
 import java.util.logging.Level;
-
-import static com.yugabyte.ysql.LoadBalanceProperties.*;
 
 public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   private final String placements;
@@ -142,7 +142,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
     // If no servers are available in primary placements then attempt fallback nodes.
     for (int i = FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE; i++) {
       if (fallbackPrivateIPs.get(i) != null && !fallbackPrivateIPs.get(i).isEmpty()) {
-        LOGGER.info("Attempting to connect servers in fallback level-" + (i-1) + " ...");
+        LOGGER.info("Attempting to connect servers in fallback level-" + (i - 1) + " ...");
         return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(i), fallbackPublicIPs.get(i));
       }
     }
