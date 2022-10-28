@@ -41,7 +41,7 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
   protected Map<String, String> hostPortMap = new HashMap<>();
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   private final PGStream stream;
-  private Connection controlConnection = null;
+  private static Connection controlConnection = null;
 
   public YBManagedHostnameVerifier(Properties props, PGStream stream){
     this.originalProperties = props;
