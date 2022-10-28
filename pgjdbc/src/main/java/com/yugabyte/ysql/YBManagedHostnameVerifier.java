@@ -41,6 +41,7 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
   protected Map<String, String> hostPortMap = new HashMap<>();
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   private final PGStream stream;
+  private Connection controlConnection = null;
 
   public YBManagedHostnameVerifier(Properties props, PGStream stream){
     this.originalProperties = props;
@@ -108,12 +109,13 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
       anyDnsSan |= sanType == TYPE_DNS_NAME;
     }
 
-    Connection controlConnection = null;
     originalProperties.setProperty("PGHOST", san);
     HostSpec[] hspec = hostSpecs(this.originalProperties);
     try {
-      controlConnection = new PgConnection(
-          hspec, originalProperties.getProperty("user", ""),originalProperties.getProperty("PGDBNAME", ""), originalProperties, null);
+      if (controlConnection == null) {
+        controlConnection = new PgConnection(
+            hspec, originalProperties.getProperty("user", ""), originalProperties.getProperty("PGDBNAME", ""), originalProperties, null);
+      }
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
@@ -121,7 +123,6 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
     ArrayList<String> hostlist = new ArrayList<>();
     try {
       hostlist = getCurrentServers(controlConnection);
-      controlConnection.close();
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
