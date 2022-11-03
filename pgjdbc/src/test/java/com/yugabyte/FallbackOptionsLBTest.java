@@ -1,8 +1,8 @@
 package com.yugabyte;
 
-import com.yugabyte.ysql.LoadBalanceProperties;
-
 import org.postgresql.util.PSQLException;
+
+import com.yugabyte.ysql.LoadBalanceProperties;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -19,7 +19,7 @@ public class FallbackOptionsLBTest {
     startYBDBCluster();
     try {
       Class.forName("org.postgresql.Driver");
-      String url1 = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true&" + LoadBalanceProperties.PREFERRED_ZONES_PROPERTY_KEY + "=";
+      String url1 = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true&" + LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY + "=";
       String url2 = "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2";
       Connection conn = DriverManager.getConnection(url1 + url2,
           "yugabyte", "yugabyte");
@@ -35,7 +35,6 @@ public class FallbackOptionsLBTest {
       createConnections(url1 + "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 12, 0, 0);
       createConnections(url1 + "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", 4, 4, 4);
       createConnections(url1 + "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 4, 4, 4);
-      createConnections(url1 + "aws.us-west.us-west-2a&" + LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY + "=aws.us-west.us-west-2b", 12, 0, 0);
 
       // Some invalid/unavailable placement zones
       createConnections(url1 + "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 0, 12, 0);

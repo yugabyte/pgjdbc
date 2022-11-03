@@ -52,7 +52,6 @@ public class LoadBalanceProperties {
     strippedProperties = (Properties) origProperties.clone();
     strippedProperties.remove(LOAD_BALANCE_PROPERTY_KEY);
     strippedProperties.remove(TOPOLOGY_AWARE_PROPERTY_KEY);
-    strippedProperties.remove(PREFERRED_ZONES_PROPERTY_KEY);
     ybURL = processURLAndProperties();
   }
 
@@ -62,10 +61,7 @@ public class LoadBalanceProperties {
     StringBuilder sb = new StringBuilder(urlParts[0]);
     urlParts = urlParts[1].split(PROPERTY_SEP);
     String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
-    String preferredZonesKey = PREFERRED_ZONES_PROPERTY_KEY + EQUALS;
     String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
-    String duplicatePlacementMsg = "Property '" + TOPOLOGY_AWARE_PROPERTY_KEY + "' is deprecated." +
-        " Use '" + PREFERRED_ZONES_PROPERTY_KEY + "' instead.";
     String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
     for (String part : urlParts) {
       if (part.startsWith(loadBalancerKey)) {
@@ -82,15 +78,6 @@ public class LoadBalanceProperties {
         String[] lbParts = part.split(EQUALS);
         if (lbParts.length != 2) {
           LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
-          continue;
-        }
-        LOGGER.log(Level.WARNING, "Property '" + TOPOLOGY_AWARE_PROPERTY_KEY + "' is deprecated."
-            + " Use '" + PREFERRED_ZONES_PROPERTY_KEY + "' instead.");
-        placements = lbParts[1];
-      } else if (part.startsWith(preferredZonesKey)) {
-        String[] lbParts = part.split(EQUALS);
-        if (lbParts.length != 2) {
-          LOGGER.log(Level.WARNING, "No valid value provided for preferred zones. Ignoring it.");
           continue;
         }
         placements = lbParts[1];
@@ -126,13 +113,7 @@ public class LoadBalanceProperties {
         }
       }
       if (originalProperties.containsKey(TOPOLOGY_AWARE_PROPERTY_KEY)) {
-        LOGGER.log(Level.WARNING, "Property '" + TOPOLOGY_AWARE_PROPERTY_KEY + "' is deprecated."
-            + " Use '" + PREFERRED_ZONES_PROPERTY_KEY + "' instead.");
         String propValue = originalProperties.getProperty(TOPOLOGY_AWARE_PROPERTY_KEY);
-        placements = propValue;
-      }
-      if (originalProperties.containsKey(PREFERRED_ZONES_PROPERTY_KEY)) {
-        String propValue = originalProperties.getProperty(PREFERRED_ZONES_PROPERTY_KEY);
         placements = propValue;
       }
     }
