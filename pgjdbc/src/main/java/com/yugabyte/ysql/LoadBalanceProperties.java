@@ -20,7 +20,6 @@ public class LoadBalanceProperties {
   private static final String SIMPLE_LB = "simple";
   public static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
   public static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
-  public static final String PREFERRED_ZONES_PROPERTY_KEY = "preferred-zones";
   public static final String REFRESH_INTERVAL_KEY = "yb-servers-refresh-interval";
   private static final String PROPERTY_SEP = "&";
   private static final String EQUALS = "=";
