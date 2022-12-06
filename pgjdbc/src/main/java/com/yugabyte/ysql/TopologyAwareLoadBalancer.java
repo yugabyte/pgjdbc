@@ -13,38 +13,86 @@
 
 package com.yugabyte.ysql;
 
+import static com.yugabyte.ysql.LoadBalanceProperties.*;
+
 import java.util.*;
 import java.util.logging.Level;
 
 public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   private final String placements;
-  private final Set<CloudPlacement> allowedPlacements;
+  private final Map<Integer, Set<CloudPlacement>> allowedPlacements = new HashMap<>();
+  private final Map<Integer, ArrayList<String>> fallbackPrivateIPs = new HashMap<>();
+  private final Map<Integer, ArrayList<String>> fallbackPublicIPs = new HashMap<>();
+  private final int PRIMARY_PLACEMENTS = 1;
+  private final int FIRST_FALLBACK = 2;
+  private final int REST_OF_CLUSTER = -1;
 
-  public TopologyAwareLoadBalancer(String placementvalues) {
-    placements = placementvalues;
-    allowedPlacements = new HashSet<>();
-    populatePlacementSet();
+  public TopologyAwareLoadBalancer(String placementValues) {
+    placements = placementValues;
+    parseGeoLocations();
   }
 
   protected String loadBalancingNodes() {
     return placements;
   }
 
-  private void populatePlacementSet() {
-    String[] placementstrings = placements.split(",");
-    for (String pl : placementstrings) {
+  private void populatePlacementSet(String placements, Set<TopologyAwareLoadBalancer.CloudPlacement> allowedPlacements) {
+    String[] pStrings = placements.split(LOCATIONS_DELIMITER);
+    for (String pl : pStrings) {
       String[] placementParts = pl.split("\\.");
-      if (placementParts.length != 3) {
-        // Log a warning and return.
-        LOGGER.log(Level.WARNING, getLoadBalancerType() + ": "
-            + "Ignoring malformed topology-key property value: " + pl);
-        continue;
+      if (placementParts.length != 3 || placementParts[0].equals("*") || placementParts[1].equals("*")) {
+        // Return an error so the user takes corrective action.
+        LOGGER.log(Level.WARNING, "Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property value: " + pl);
+        throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property value: " + pl);
       }
-      CloudPlacement cp = new CloudPlacement(
+      TopologyAwareLoadBalancer.CloudPlacement cp = new TopologyAwareLoadBalancer.CloudPlacement(
           placementParts[0], placementParts[1], placementParts[2]);
-      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Adding placement " + cp + " to allowed "
-          + "list");
+      LOGGER.log(Level.FINE, "Adding placement " + cp + " to allowed list");
       allowedPlacements.add(cp);
+    }
+  }
+
+  private void parseGeoLocations() {
+    String[] values = placements.split(LOCATIONS_DELIMITER);
+    for (String value : values) {
+      String[] v = value.split(PREFERENCE_DELIMITER);
+      if (v.length > 2 || value.endsWith(":")) {
+        throw new IllegalArgumentException("Invalid value part for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
+      }
+      if (v.length == 1) {
+        Set<TopologyAwareLoadBalancer.CloudPlacement> primary = allowedPlacements.computeIfAbsent(PRIMARY_PLACEMENTS, k -> new HashSet<>());
+        populatePlacementSet(v[0], primary);
+      } else {
+        int pref = Integer.valueOf(v[1]);
+        if (pref == 1) {
+          Set<TopologyAwareLoadBalancer.CloudPlacement> primary = allowedPlacements.get(PRIMARY_PLACEMENTS);
+          if (primary == null) {
+            primary = new HashSet<>();
+            allowedPlacements.put(PRIMARY_PLACEMENTS, primary);
+          }
+          populatePlacementSet(v[0], primary);
+        } else if (pref > 1 && pref <= MAX_PREFERENCE_VALUE) {
+          Set<TopologyAwareLoadBalancer.CloudPlacement> fallbackPlacements = allowedPlacements.get(pref);
+          if (fallbackPlacements == null) {
+            fallbackPlacements = new HashSet<>();
+            allowedPlacements.put(pref, fallbackPlacements);
+          }
+          populatePlacementSet(v[0], fallbackPlacements);
+        } else {
+          throw new IllegalArgumentException("Invalid preference value for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
+        }
+      }
+    }
+  }
+
+  @Override
+  protected void clearHostIPLists() {
+    super.clearHostIPLists();
+    for (ArrayList<String> hosts : fallbackPrivateIPs.values()) {
+      hosts.clear();
+    }
+    for (ArrayList<String> publicIPs : fallbackPublicIPs.values()) {
+      publicIPs.clear();
     }
   }
 
@@ -52,7 +100,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   protected void updateCurrentHostList(ArrayList<String> currentPrivateIps, String host,
       String publicIp, String cloud, String region, String zone) {
     CloudPlacement cp = new CloudPlacement(cloud, region, zone);
-    if (allowedPlacements.contains(cp)) {
+    if (cp.isContainedIn(allowedPlacements.get(PRIMARY_PLACEMENTS))) {
       LOGGER.log(Level.FINE,
           getLoadBalancerType() + ": allowedPlacements set: "
               + allowedPlacements + " returned contains true for cp: " + cp);
@@ -61,10 +109,46 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
         currentPublicIps.add(publicIp);
       }
     } else {
+      for (Map.Entry<Integer, Set<CloudPlacement>> allowedCPs : allowedPlacements.entrySet()) {
+        if (cp.isContainedIn(allowedCPs.getValue())) {
+          ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(allowedCPs.getKey(), k -> new ArrayList<>());
+          hosts.add(host);
+          if (!publicIp.trim().isEmpty()) {
+            ArrayList<String> publicIPs = fallbackPublicIPs.computeIfAbsent(allowedCPs.getKey(), k -> new ArrayList<>());
+            publicIPs.add(publicIp);
+          }
+          return;
+        }
+      }
+      // Maintain the list of hosts which do not quality for any preference zone.
+      // Use it as THE LAST fallback - the entire cluster nodes.
+      ArrayList<String> remainingHosts = fallbackPrivateIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
+      remainingHosts.add(host);
+      ArrayList<String> remainingPublicIPs = fallbackPublicIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
+      remainingPublicIPs.add(publicIp);
       LOGGER.log(Level.FINE,
           getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
               + " returned contains false for cp: " + cp);
     }
+  }
+
+  @Override
+  protected ArrayList<String> getPrivateOrPublicServers(ArrayList<String> privateHosts,
+      ArrayList<String> publicHosts) {
+    ArrayList<String> servers = super.getPrivateOrPublicServers(privateHosts, publicHosts);
+    if (servers != null && !servers.isEmpty()) {
+      return servers;
+    }
+    // If no servers are available in primary placements then attempt fallback nodes.
+    for (int i = FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE; i++) {
+      if (fallbackPrivateIPs.get(i) != null && !fallbackPrivateIPs.get(i).isEmpty()) {
+        LOGGER.info("Attempting to connect servers in fallback level-" + (i - 1) + " ...");
+        return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(i), fallbackPublicIPs.get(i));
+      }
+    }
+    // If nothing works out, let it fallback to entire cluster nodes
+    return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(REST_OF_CLUSTER),
+        fallbackPublicIPs.get(REST_OF_CLUSTER));
   }
 
   protected String getLoadBalancerType() {
@@ -80,6 +164,25 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       this.cloud = cloud;
       this.region = region;
       this.zone = zone;
+    }
+
+    public boolean isContainedIn(Set<CloudPlacement> set) {
+      if (this.zone.equals("*")) {
+        for (CloudPlacement cp : set) {
+          if (cp.cloud.equalsIgnoreCase(this.cloud) && cp.region.equalsIgnoreCase(this.region)) {
+            return true;
+          }
+        }
+      } else {
+        for (CloudPlacement cp : set) {
+          if (cp.cloud.equalsIgnoreCase(this.cloud)
+              && cp.region.equalsIgnoreCase(this.region)
+              && (cp.zone.equalsIgnoreCase(this.zone) || cp.zone.equals("*"))) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
 
     public int hashCode() {

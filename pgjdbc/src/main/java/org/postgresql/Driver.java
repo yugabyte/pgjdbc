@@ -458,7 +458,7 @@ public class Driver implements java.sql.Driver {
    * thread without enforcing a timeout, regardless of any timeout specified in the properties.
    *
    * @param url the original URL
-   * @param props the parsed/defaulted connection properties
+   * @param properties the parsed/defaulted connection properties
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */

@@ -12,18 +12,22 @@
 //
 package com.yugabyte.ysql;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class LoadBalanceProperties {
   private static final String SIMPLE_LB = "simple";
-  private static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
-  private static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
+  public static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
+  public static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
+  public static final String REFRESH_INTERVAL_KEY = "yb-servers-refresh-interval";
   private static final String PROPERTY_SEP = "&";
   private static final String EQUALS = "=";
+  public static final String LOCATIONS_DELIMITER = ",";
+  public static final String PREFERENCE_DELIMITER = ":";
+  public static final int MAX_PREFERENCE_VALUE = 10;
+  public static final int DEFAULT_REFRESH_INTERVAL = 300;
+  public static final int MAX_REFRESH_INTERVAL = 600;
 
   private static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
@@ -39,6 +43,7 @@ public class LoadBalanceProperties {
   private boolean hasLoadBalance;
   private final String ybURL;
   private String placements = null;
+  private int refreshInterval = -1;
 
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
@@ -56,6 +61,7 @@ public class LoadBalanceProperties {
     urlParts = urlParts[1].split(PROPERTY_SEP);
     String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
     String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
+    String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
     for (String part : urlParts) {
       if (part.startsWith(loadBalancerKey)) {
         String[] lbParts = part.split(EQUALS);
@@ -69,11 +75,25 @@ public class LoadBalanceProperties {
         }
       } else if (part.startsWith(topologyKey)) {
         String[] lbParts = part.split(EQUALS);
-        if (lbParts.length < 2) {
-          LOGGER.log(Level.WARNING, "No value provided for topology keys. Ignoring it.");
+        if (lbParts.length != 2) {
+          LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
           continue;
         }
         placements = lbParts[1];
+      } else if (part.startsWith(refreshIntervalKey)) {
+        String[] lbParts = part.split(EQUALS);
+        if (lbParts.length != 2) {
+          LOGGER.log(Level.WARNING, "No valid value provided for " + REFRESH_INTERVAL_KEY + ". Ignoring it.");
+          continue;
+        }
+        try {
+          refreshInterval = Integer.parseInt(lbParts[1]);
+          if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
+            refreshInterval = DEFAULT_REFRESH_INTERVAL;
+          }
+        } catch (NumberFormatException nfe) {
+          refreshInterval = DEFAULT_REFRESH_INTERVAL;
+        }
       } else {
         if (sb.toString().contains("?")) {
           sb.append(PROPERTY_SEP);
@@ -87,7 +107,7 @@ public class LoadBalanceProperties {
     if (originalProperties != null) {
       if (originalProperties.containsKey(LOAD_BALANCE_PROPERTY_KEY)) {
         String propValue = originalProperties.getProperty(LOAD_BALANCE_PROPERTY_KEY);
-        if (propValue.equals("true")) {
+        if (propValue.equalsIgnoreCase("true")) {
           hasLoadBalance = true;
         }
       }
@@ -136,7 +156,7 @@ public class LoadBalanceProperties {
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(SIMPLE_LB);
           if (ld == null) {
-            ld = ClusterAwareLoadBalancer.getInstance();
+            ld = ClusterAwareLoadBalancer.getInstance(refreshInterval);
             CONNECTION_MANAGER_MAP.put(SIMPLE_LB, ld);
           }
         }

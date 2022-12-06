@@ -2,7 +2,6 @@
  * Copyright (c) 2019, PostgreSQL Global Development Group
  * See the LICENSE file in the project root for more information.
  */
- 
 
 plugins {
     id("build-logic.repositories")
