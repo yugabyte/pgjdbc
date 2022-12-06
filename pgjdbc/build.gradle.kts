@@ -187,7 +187,7 @@ tasks.shadowJar {
     listOf(
             "com.ongres"
     ).forEach {
-        relocate(it, "com.yugabyte.shaded.$it") //modified
+        relocate(it, "com.yugabyte.shaded.$it") // modified
     }
     listOf( // added
             "org.postgresql"
@@ -406,7 +406,6 @@ publishing {
                 password = System.getenv("OSSRH_PASSWORD")
             }
         }
-
     }
 }
 

@@ -10,6 +10,7 @@
 // or implied.  See the License for the specific language governing permissions and limitations
 // under the License.
 //
+
 package com.yugabyte.ysql;
 
 import org.postgresql.jdbc.PgConnection;
@@ -41,6 +42,7 @@ public class ClusterAwareLoadBalancer {
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   protected ArrayList<String> currentPublicIps = new ArrayList<>();
   protected Boolean useHostColumn = null;
+  protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
   public static ClusterAwareLoadBalancer instance() {
     return instance;
@@ -49,11 +51,14 @@ public class ClusterAwareLoadBalancer {
   public ClusterAwareLoadBalancer() {
   }
 
-  public static ClusterAwareLoadBalancer getInstance() {
+  public static ClusterAwareLoadBalancer getInstance(int refreshListSeconds) {
     if (instance == null) {
       synchronized (ClusterAwareLoadBalancer.class) {
         if (instance == null) {
           instance = new ClusterAwareLoadBalancer();
+          instance.refreshListSeconds =
+              refreshListSeconds > 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
+              refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
         }
       }
     }
@@ -98,7 +103,7 @@ public class ClusterAwareLoadBalancer {
       // Now we have exhausted the servers list which was populated with (private) host values.
       // So try connecting to the public_ips.
       ArrayList<String> newList = new ArrayList<String>();
-      newList.addAll(currentPublicIps);
+      newList.addAll(currentPublicIps); // todo try respective public ip list?
       if (!newList.isEmpty()) {
         useHostColumn = Boolean.FALSE;
         servers = newList;
@@ -115,8 +120,6 @@ public class ClusterAwareLoadBalancer {
         getLoadBalancerType() + ": Host chosen for new connection: " + chosenHost);
     return chosenHost;
   }
-
-  public static int refreshListSeconds = 300;
 
   public static boolean forceRefresh = false;
 
@@ -161,7 +164,7 @@ public class ClusterAwareLoadBalancer {
           PSQLState.UNKNOWN_STATE, e);
     }
 
-    currentPublicIps.clear();
+    clearHostIPLists();
     while (rs.next()) {
       String host = rs.getString("host");
       String publicHost = rs.getString("public_ip");
@@ -198,14 +201,18 @@ public class ClusterAwareLoadBalancer {
     return getPrivateOrPublicServers(currentPrivateIps, currentPublicIps);
   }
 
+  protected void clearHostIPLists() {
+    currentPublicIps.clear();
+  }
+
   protected ArrayList<String> getPrivateOrPublicServers(ArrayList<String> privateHosts,
       ArrayList<String> publicHosts) {
     if (useHostColumn == null) {
       if (publicHosts.isEmpty()) {
         useHostColumn = Boolean.TRUE;
       }
-      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Either private or public should have "
-          + "matched with one of the servers. Using private addresses.");
+      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Either private or public address should "
+          + "have matched with one of the servers. Using private addresses.");
       return privateHosts;
     }
     ArrayList<String> currentHosts = useHostColumn ? privateHosts : publicHosts;
@@ -253,7 +260,7 @@ public class ClusterAwareLoadBalancer {
     LOGGER.log(Level.FINE, getLoadBalancerType() + ": updating connection count for {0} by {1}",
         new String[]{host, String.valueOf(incDec)});
     Integer currentCount = hostToNumConnMap.get(host);
-    if (currentCount == 0 && incDec < 0) {
+    if ((currentCount == null || currentCount == 0) && incDec < 0) {
       return;
     }
     if (currentCount == null && incDec > 0) {
@@ -286,5 +293,9 @@ public class ClusterAwareLoadBalancer {
     for (Map.Entry<String, Integer> e : hostToNumConnMap.entrySet()) {
       System.out.println(e.getKey() + " - " + e.getValue());
     }
+  }
+
+  public int getConnectionCountFor(String server) {
+    return (hostToNumConnMap.get(server) == null) ? 0 : hostToNumConnMap.get(server);
   }
 }
