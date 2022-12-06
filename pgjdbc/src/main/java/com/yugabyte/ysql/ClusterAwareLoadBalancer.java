@@ -294,4 +294,8 @@ public class ClusterAwareLoadBalancer {
       System.out.println(e.getKey() + " - " + e.getValue());
     }
   }
+
+  public int getConnectionCountFor(String server) {
+    return (hostToNumConnMap.get(server) == null) ? 0 : hostToNumConnMap.get(server);
+  }
 }

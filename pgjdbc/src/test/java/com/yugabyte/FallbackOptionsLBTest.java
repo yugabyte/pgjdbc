@@ -30,25 +30,25 @@ public class FallbackOptionsLBTest {
       conn.close();
 
       // All valid/available placement zones
-      createConnections(url1 + "aws.us-west.us-west-2a,aws.us-west.us-west-2c", 6, 0, 6);
-      createConnections(url1 + "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", 6, 6, 0);
-      createConnections(url1 + "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 12, 0, 0);
-      createConnections(url1 + "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", 4, 4, 4);
-      createConnections(url1 + "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 4, 4, 4);
+      createConnections(url1, "aws.us-west.us-west-2a,aws.us-west.us-west-2c", 6, 0, 6);
+      createConnections(url1, "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", 6, 6, 0);
+      createConnections(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 12, 0, 0);
+      createConnections(url1, "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", 4, 4, 4);
+      createConnections(url1, "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 4, 4, 4);
 
       // Some invalid/unavailable placement zones
-      createConnections(url1 + "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 0, 12, 0);
-      createConnections(url1 + "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", 12, 0, 0);
-      createConnections(url1 + "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,BAD.BAD.BAD:3", 12, 0, 0);
-      createConnections(url1 + "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", 0, 0, 12);
-      createConnections(url1 + "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.*:3", 4, 4, 4);
+      createConnections(url1, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", 0, 12, 0);
+      createConnections(url1, "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", 12, 0, 0);
+      createConnections(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,BAD.BAD.BAD:3", 12, 0, 0);
+      createConnections(url1, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", 0, 0, 12);
+      createConnections(url1, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.*:3", 4, 4, 4);
 
       // Invalid preference values, results in failure
-      createConnections(url1 + "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", -1, 0, 0);
-      createConnections(url1 + "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws.us-west.us-west-2c:3", -1, 0, 0);
-      createConnections(url1 + "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:", -1, 0, 0);
+      createConnections(url1, "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", -1, 0, 0);
+      createConnections(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws.us-west.us-west-2c:3", -1, 0, 0);
+      createConnections(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:", -1, 0, 0);
     } finally {
-      if (path != null || !path.trim().isEmpty()) {
+      if (path != null && !path.trim().isEmpty()) {
         stopYBDBCluster();
       }
     }
@@ -91,11 +91,11 @@ public class FallbackOptionsLBTest {
     }
   }
 
-  private static void createConnections(String url, int cnt1, int cnt2, int cnt3) throws SQLException {
+  private static void createConnections(String url, String tkValue, int cnt1, int cnt2, int cnt3) throws SQLException {
     Connection[] connections = new Connection[numConnections];
     for (int i = 0; i < numConnections; i++) {
       try {
-        connections[i] = DriverManager.getConnection(url, "yugabyte", "yugabyte");
+        connections[i] = DriverManager.getConnection(url + tkValue, "yugabyte", "yugabyte");
       } catch (PSQLException e) {
         assert cnt1 == -1;
         System.out.println(e.getCause());
@@ -106,11 +106,11 @@ public class FallbackOptionsLBTest {
     System.out.println("Created "+ numConnections +" connections");
 
     System.out.print("Client backend processes on ");
-    verifyOn("127.0.0.1", cnt1);
+    verifyOn("127.0.0.1", cnt1, tkValue);
     System.out.print(", ");
-    verifyOn("127.0.0.2", cnt2);
+    verifyOn("127.0.0.2", cnt2, tkValue);
     System.out.print(", ");
-    verifyOn("127.0.0.3", cnt3);
+    verifyOn("127.0.0.3", cnt3, tkValue);
     System.out.println("");
     for (Connection con : connections) {
       if (con != null) {
@@ -119,7 +119,7 @@ public class FallbackOptionsLBTest {
     }
   }
 
-  private static void verifyOn(String server, int expectedCount) {
+  private static void verifyOn(String server, int expectedCount, String tkValue) {
     try {
       ProcessBuilder builder = new ProcessBuilder();
       builder.command("sh", "-c", "curl http://" + server + ":13000/rpcz");
@@ -131,7 +131,11 @@ public class FallbackOptionsLBTest {
       assert exitCode == 0;
       String[] count = result.split("client backend");
       System.out.print(server + " = " + (count.length - 1));
+      // Server side validation
       assert expectedCount == count.length - 1;
+      // Client side validation
+      int recorded = LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(tkValue).getConnectionCountFor(server);
+      assert recorded == expectedCount;
     } catch (Exception e) {
       System.out.println("Exception " + e);
     }
