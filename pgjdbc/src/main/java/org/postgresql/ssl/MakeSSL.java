@@ -5,6 +5,8 @@
 
 package org.postgresql.ssl;
 
+import com.yugabyte.ysql.YBManagedHostnameVerifier;
+
 import org.postgresql.PGProperty;
 import org.postgresql.core.PGStream;
 import org.postgresql.core.SocketFactoryFactory;
@@ -62,7 +64,11 @@ public class MakeSSL extends ObjectFactory {
     if (sslhostnameverifier == null) {
       hvn = PGjdbcHostnameVerifier.INSTANCE;
       sslhostnameverifier = "PgjdbcHostnameVerifier";
-    } else {
+    }
+    else if (sslhostnameverifier.equalsIgnoreCase("com.yugabyte.ysql.YBManagedHostnameVerifier")){
+      hvn = new YBManagedHostnameVerifier(info,stream);
+    }
+    else {
       try {
         hvn = (HostnameVerifier) instantiate(sslhostnameverifier, info, false, null);
       } catch (Exception e) {
