@@ -42,6 +42,7 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   private final PGStream stream;
   private static Connection controlConnection = null;
+  private static String originalHost = null;
 
   public YBManagedHostnameVerifier(Properties props, PGStream stream){
     this.originalProperties = props;
@@ -112,7 +113,8 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
     originalProperties.setProperty("PGHOST", san);
     HostSpec[] hspec = hostSpecs(this.originalProperties);
     try {
-      if (controlConnection == null) {
+      if (controlConnection == null || ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost().equals(originalHost)) {
+        originalHost = san;
         controlConnection = new PgConnection(
             hspec, originalProperties.getProperty("user", ""), originalProperties.getProperty("PGDBNAME", ""), originalProperties, null);
       }
