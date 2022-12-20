@@ -56,51 +56,52 @@ public class LoadBalanceProperties {
 
   public String processURLAndProperties() {
     String[] urlParts = this.originalUrl.split("\\?");
-    if (urlParts.length != 2) return this.originalUrl;
     StringBuilder sb = new StringBuilder(urlParts[0]);
-    urlParts = urlParts[1].split(PROPERTY_SEP);
-    String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
-    String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
-    String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
-    for (String part : urlParts) {
-      if (part.startsWith(loadBalancerKey)) {
-        String[] lbParts = part.split(EQUALS);
-        if (lbParts.length < 2) {
-          LOGGER.log(Level.WARNING, "No value provided for load balance property. Ignoring it.");
-          continue;
-        }
-        String propValue = lbParts[1];
-        if (propValue.equalsIgnoreCase("true")) {
-          this.hasLoadBalance = true;
-        }
-      } else if (part.startsWith(topologyKey)) {
-        String[] lbParts = part.split(EQUALS);
-        if (lbParts.length != 2) {
-          LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
-          continue;
-        }
-        placements = lbParts[1];
-      } else if (part.startsWith(refreshIntervalKey)) {
-        String[] lbParts = part.split(EQUALS);
-        if (lbParts.length != 2) {
-          LOGGER.log(Level.WARNING, "No valid value provided for " + REFRESH_INTERVAL_KEY + ". Ignoring it.");
-          continue;
-        }
-        try {
-          refreshInterval = Integer.parseInt(lbParts[1]);
-          if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
+    if (urlParts.length == 2) {
+      urlParts = urlParts[1].split(PROPERTY_SEP);
+      String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
+      String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
+      String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
+      for (String part : urlParts) {
+        if (part.startsWith(loadBalancerKey)) {
+          String[] lbParts = part.split(EQUALS);
+          if (lbParts.length < 2) {
+            LOGGER.log(Level.WARNING, "No value provided for load balance property. Ignoring it.");
+            continue;
+          }
+          String propValue = lbParts[1];
+          if (propValue.equalsIgnoreCase("true")) {
+            this.hasLoadBalance = true;
+          }
+        } else if (part.startsWith(topologyKey)) {
+          String[] lbParts = part.split(EQUALS);
+          if (lbParts.length != 2) {
+            LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
+            continue;
+          }
+          placements = lbParts[1];
+        } else if (part.startsWith(refreshIntervalKey)) {
+          String[] lbParts = part.split(EQUALS);
+          if (lbParts.length != 2) {
+            LOGGER.log(Level.WARNING, "No valid value provided for " + REFRESH_INTERVAL_KEY + ". Ignoring it.");
+            continue;
+          }
+          try {
+            refreshInterval = Integer.parseInt(lbParts[1]);
+            if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
+              refreshInterval = DEFAULT_REFRESH_INTERVAL;
+            }
+          } catch (NumberFormatException nfe) {
             refreshInterval = DEFAULT_REFRESH_INTERVAL;
           }
-        } catch (NumberFormatException nfe) {
-          refreshInterval = DEFAULT_REFRESH_INTERVAL;
-        }
-      } else {
-        if (sb.toString().contains("?")) {
-          sb.append(PROPERTY_SEP);
         } else {
-          sb.append("?");
+          if (sb.toString().contains("?")) {
+            sb.append(PROPERTY_SEP);
+          } else {
+            sb.append("?");
+          }
+          sb.append(part);
         }
-        sb.append(part);
       }
     }
     // Check properties bag also
