@@ -116,6 +116,17 @@ public class LoadBalanceProperties {
         String propValue = originalProperties.getProperty(TOPOLOGY_AWARE_PROPERTY_KEY);
         placements = propValue;
       }
+      if (originalProperties.containsKey(REFRESH_INTERVAL_KEY)) {
+        String propValue = originalProperties.getProperty(REFRESH_INTERVAL_KEY);
+        try {
+          refreshInterval = Integer.parseInt(propValue);
+          if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
+            refreshInterval = DEFAULT_REFRESH_INTERVAL;
+          }
+        } catch (NumberFormatException nfe) {
+          refreshInterval = DEFAULT_REFRESH_INTERVAL;
+        }
+      }
     }
     return sb.toString();
   }

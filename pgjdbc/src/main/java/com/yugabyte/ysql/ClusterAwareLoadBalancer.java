@@ -37,7 +37,7 @@ public class ClusterAwareLoadBalancer {
   private long lastServerListFetchTime = 0L;
   private volatile ArrayList<String> servers = null;
   Map<String, Integer> hostToNumConnMap = new HashMap<>();
-  Set<String> unreachableHosts = new HashSet<>();
+  Map<String, Long> unreachableHosts = new HashMap<String, Long>();
   protected Map<String, String> hostPortMap = new HashMap<>();
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   protected ArrayList<String> currentPublicIps = new ArrayList<>();
@@ -58,7 +58,7 @@ public class ClusterAwareLoadBalancer {
           instance = new ClusterAwareLoadBalancer();
           instance.refreshListSeconds =
               refreshListSeconds > 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
-              refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+                  refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
         }
       }
     }
@@ -74,10 +74,25 @@ public class ClusterAwareLoadBalancer {
   }
 
   public synchronized String getLeastLoadedServer(List<String> failedHosts) {
+    if (hostToNumConnMap.isEmpty() && currentPublicIps.isEmpty()) {
+      // Try fallback on rest of the cluster nodes
+      servers = getPrivateOrPublicServers(new ArrayList<String>(), currentPublicIps);
+      if (servers != null && !servers.isEmpty()) {
+        LOGGER.fine("Falling back on the rest of the cluster nodes ...");
+        for (String h : servers) {
+          if (!hostToNumConnMap.containsKey(h)) {
+            hostToNumConnMap.put(h, 0);
+          }
+        }
+      } else {
+        return null;
+      }
+    }
     int min = Integer.MAX_VALUE;
     ArrayList<String> minConnectionsHostList = new ArrayList<>();
     for (String h : hostToNumConnMap.keySet()) {
       if (failedHosts.contains(h)) {
+        LOGGER.fine("Skipping failed host " + h);
         continue;
       }
       int currLoad = hostToNumConnMap.get(h);
@@ -105,6 +120,7 @@ public class ClusterAwareLoadBalancer {
       ArrayList<String> newList = new ArrayList<String>();
       newList.addAll(currentPublicIps); // todo try respective public ip list?
       if (!newList.isEmpty()) {
+        LOGGER.info("No host found, attempting the public ips...");
         useHostColumn = Boolean.FALSE;
         servers = newList;
         unreachableHosts.clear();
@@ -113,7 +129,8 @@ public class ClusterAwareLoadBalancer {
             hostToNumConnMap.put(h, 0);
           }
         }
-        return getLeastLoadedServer(failedHosts); // base condition for this recursive call is useHostColumn != null
+        // base condition for this recursive call is useHostColumn != null
+        return getLeastLoadedServer(failedHosts);
       }
     }
     LOGGER.log(Level.FINE,
@@ -243,7 +260,20 @@ public class ClusterAwareLoadBalancer {
       return false;
     }
     lastServerListFetchTime = currTime;
-    unreachableHosts.clear();
+    long now = System.currentTimeMillis() / 1000;
+    long failedHostTTL = Long.getLong("failed-host-ttl-seconds", 15);
+    Set<String> possiblyReachableHosts = new HashSet();
+    for (Map.Entry<String, Long> e : unreachableHosts.entrySet()) {
+      if ((now - e.getValue()) > failedHostTTL) {
+        possiblyReachableHosts.add(e.getKey());
+      } else {
+        LOGGER.fine("Not removing this host from unreachableHosts: " + e.getKey());
+      }
+    }
+    for (String h : possiblyReachableHosts) {
+      unreachableHosts.remove(h);
+    }
+
     for (String h : servers) {
       if (!hostToNumConnMap.containsKey(h)) {
         hostToNumConnMap.put(h, 0);
@@ -271,11 +301,11 @@ public class ClusterAwareLoadBalancer {
   }
 
   public Set<String> getUnreachableHosts() {
-    return unreachableHosts;
+    return unreachableHosts.keySet();
   }
 
   public synchronized void updateFailedHosts(String chosenHost) {
-    unreachableHosts.add(chosenHost);
+    unreachableHosts.putIfAbsent(chosenHost, System.currentTimeMillis() / 1000);
     hostToNumConnMap.remove(chosenHost);
   }
 
