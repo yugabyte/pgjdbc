@@ -149,7 +149,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       }
     }
     // If nothing works out, let it fallback to entire cluster nodes
-    boolean limitFallbackToGivenTKs = Boolean.getBoolean("yb-limit-fallback-to-topology-keys");
+    boolean limitFallbackToGivenTKs = Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY);
     if (limitFallbackToGivenTKs) {
       return servers;
     }

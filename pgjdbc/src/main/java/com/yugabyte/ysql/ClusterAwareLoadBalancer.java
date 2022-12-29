@@ -29,6 +29,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.yugabyte.ysql.LoadBalanceProperties.*;
+
 public class ClusterAwareLoadBalancer {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
@@ -148,6 +150,9 @@ public class ClusterAwareLoadBalancer {
     long currentTimeInMillis = System.currentTimeMillis();
     long diff = (currentTimeInMillis - lastServerListFetchTime) / 1000;
     boolean firstTime = servers == null;
+    refreshListSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, refreshListSeconds);
+    refreshListSeconds = (refreshListSeconds < 0 || refreshListSeconds > MAX_REFRESH_INTERVAL) ?
+        DEFAULT_REFRESH_INTERVAL : refreshListSeconds;
     if (firstTime || diff > refreshListSeconds) {
       LOGGER.log(Level.FINE, getLoadBalancerType() + ": "
           + "Needs refresh as list of servers may be stale or being fetched for the first time");
@@ -261,7 +266,7 @@ public class ClusterAwareLoadBalancer {
     }
     lastServerListFetchTime = currTime;
     long now = System.currentTimeMillis() / 1000;
-    long failedHostTTL = Long.getLong("failed-host-ttl-seconds", 15);
+    long failedHostTTL = Long.getLong("failed-host-ttl-seconds", 5);
     Set<String> possiblyReachableHosts = new HashSet();
     for (Map.Entry<String, Long> e : unreachableHosts.entrySet()) {
       if ((now - e.getValue()) > failedHostTTL) {

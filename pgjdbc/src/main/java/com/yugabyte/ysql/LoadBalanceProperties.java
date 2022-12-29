@@ -21,6 +21,13 @@ public class LoadBalanceProperties {
   public static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
   public static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
   public static final String REFRESH_INTERVAL_KEY = "yb-servers-refresh-interval";
+  /**
+   * Can have value either true or false. Default is false.
+   * true means stick to explicitly given placements for fallback, do not fallback to entire
+   * cluster nodes. false means fallback to entire cluster nodes when nodes in explicit
+   * placements are unavailable.
+   */
+  public static final String EXPLICIT_FALLBACK_ONLY_KEY = "explicit-fallback-only";
   private static final String PROPERTY_SEP = "&";
   private static final String EQUALS = "=";
   public static final String LOCATIONS_DELIMITER = ",";
@@ -44,6 +51,7 @@ public class LoadBalanceProperties {
   private final String ybURL;
   private String placements = null;
   private int refreshInterval = -1;
+  private boolean explicitFallbackOnly;
 
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
@@ -62,6 +70,7 @@ public class LoadBalanceProperties {
       String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
       String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
       String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
+      String explicitFallbackOnlyKey = EXPLICIT_FALLBACK_ONLY_KEY;
       for (String part : urlParts) {
         if (part.startsWith(loadBalancerKey)) {
           String[] lbParts = part.split(EQUALS);
@@ -83,7 +92,8 @@ public class LoadBalanceProperties {
         } else if (part.startsWith(refreshIntervalKey)) {
           String[] lbParts = part.split(EQUALS);
           if (lbParts.length != 2) {
-            LOGGER.log(Level.WARNING, "No valid value provided for " + REFRESH_INTERVAL_KEY + ". Ignoring it.");
+            LOGGER.log(Level.WARNING, "No valid value provided for " + REFRESH_INTERVAL_KEY + ". " +
+                "Ignoring it.");
             continue;
           }
           try {
@@ -93,6 +103,15 @@ public class LoadBalanceProperties {
             }
           } catch (NumberFormatException nfe) {
             refreshInterval = DEFAULT_REFRESH_INTERVAL;
+          }
+        } else if (part.startsWith(explicitFallbackOnlyKey)) {
+          String[] lbParts = part.split(EQUALS);
+          if (lbParts.length != 2) {
+            continue;
+          }
+          String propValue = lbParts[1];
+          if (propValue.equalsIgnoreCase("true")) {
+            this.explicitFallbackOnly = true;
           }
         } else {
           if (sb.toString().contains("?")) {
@@ -125,6 +144,12 @@ public class LoadBalanceProperties {
           }
         } catch (NumberFormatException nfe) {
           refreshInterval = DEFAULT_REFRESH_INTERVAL;
+        }
+      }
+      if (originalProperties.containsKey(EXPLICIT_FALLBACK_ONLY_KEY)) {
+        String propValue = originalProperties.getProperty(EXPLICIT_FALLBACK_ONLY_KEY);
+        if (propValue.equalsIgnoreCase("true")) {
+          explicitFallbackOnly = true;
         }
       }
     }
@@ -185,6 +210,10 @@ public class LoadBalanceProperties {
         }
       }
     }
+    // todo Find a better way to pass/update these properties. Currently, lb instance is
+    //  singleton, so cannot include these in it.
+    System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
+    System.setProperty(EXPLICIT_FALLBACK_ONLY_KEY, String.valueOf(explicitFallbackOnly));
     return ld;
   }
 }
