@@ -59,7 +59,7 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws.us-west.us-west-2c:3", format(-1, 0, 0));
       createConnectionsAndVerify(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:", format(-1, 0, 0));
     } finally {
-      executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster.", 10);
+      executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
 
@@ -82,6 +82,8 @@ public class FallbackOptionsLBTest {
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
       createConnectionsAndVerify(url, "aws.us-west.us-west-1a", format(-1, -1, -1, 4, 4, 4));
+      createConnectionsAndVerify("jdbc:yugabytedb://127.0.0.4:5433/yugabyte?load-balance=true&explicit-fallback-only=true&topology-keys=",
+          "aws.us-west.us-west-1a", format(-1, -1, -1, 12, 0, 0));
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }

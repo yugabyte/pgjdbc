@@ -76,11 +76,11 @@ public class ClusterAwareLoadBalancer {
   }
 
   public synchronized String getLeastLoadedServer(List<String> failedHosts) {
-    if (hostToNumConnMap.isEmpty() && currentPublicIps.isEmpty()) {
+    if ((hostToNumConnMap.isEmpty() && currentPublicIps.isEmpty())
+        || Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY)) {
       // Try fallback on rest of the cluster nodes
       servers = getPrivateOrPublicServers(new ArrayList<String>(), currentPublicIps);
       if (servers != null && !servers.isEmpty()) {
-        LOGGER.fine("Falling back on the rest of the cluster nodes ...");
         for (String h : servers) {
           if (!hostToNumConnMap.containsKey(h)) {
             hostToNumConnMap.put(h, 0);
