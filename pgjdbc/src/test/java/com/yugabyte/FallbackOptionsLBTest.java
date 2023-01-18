@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public class FallbackOptionsLBTest {
   private static int numConnections = 12;
   private static final String path = System.getenv("YBDB_PATH");
-  private static String url1 = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true&"
+  private static String baseUrl = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true&"
       + LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY + "=";
 
   public static void main(String[] args) throws SQLException, ClassNotFoundException {
@@ -29,11 +29,11 @@ public class FallbackOptionsLBTest {
   }
 
   private static void checkBasicBehavior() throws SQLException {
-    // Start RF=3 cluster across 2a, 2b and 2c
+    // Start RF=3 cluster with placements 127.0.0.1 -> 2a, 127.0.0.2 -> 2b and 127.0.0.3 -> 2c
     startYBDBCluster();
     try {
-      String url2 = "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2";
-      Connection conn = DriverManager.getConnection(url1 + url2, "yugabyte", "yugabyte");
+      String tkValues = "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2";
+      Connection conn = DriverManager.getConnection(baseUrl + tkValues, "yugabyte", "yugabyte");
       Statement stmt = conn.createStatement();
       stmt.execute("CREATE TABLE IF NOT EXISTS employee" +
           "  (id int primary key, name varchar, age int, language text)");
@@ -41,29 +41,29 @@ public class FallbackOptionsLBTest {
       conn.close();
 
       // All valid/available placement zones
-      createConnectionsAndVerify(url1, "aws.us-west.us-west-2a,aws.us-west.us-west-2c", format(6, 0, 6));
-      createConnectionsAndVerify(url1, "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", format(6, 6, 0));
-      createConnectionsAndVerify(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", format(12, 0, 0));
-      createConnectionsAndVerify(url1, "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", format(4, 4, 4));
-      createConnectionsAndVerify(url1, "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", format(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2c", expectedInput(6, 0, 6));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", expectedInput(6, 6, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(12, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", expectedInput(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(4, 4, 4));
 
       // Some invalid/unavailable placement zones
-      createConnectionsAndVerify(url1, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", format(0, 12, 0));
-      createConnectionsAndVerify(url1, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:2", format(0, 6, 6));
-      createConnectionsAndVerify(url1, "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", format(12, 0, 0));
-      createConnectionsAndVerify(url1, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", format(0, 0, 12));
-      createConnectionsAndVerify(url1, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.*:3", format(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(0, 12, 0));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:2", expectedInput(0, 6, 6));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", expectedInput(12, 0, 0));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", expectedInput(0, 0, 12));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.*:3", expectedInput(4, 4, 4));
 
-      // Invalid preference values, results in failure
-      createConnectionsAndVerify(url1, "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", format(-1, 0, 0));
-      createConnectionsAndVerify(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws.us-west.us-west-2c:3", format(-1, 0, 0));
-      createConnectionsAndVerify(url1, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:", format(-1, 0, 0));
+      // Invalid preference value results in failure, value -1 indicates an error is expected.
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws.us-west.us-west-2c:3", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:", expectedInput(-1, 0, 0));
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
 
-  private static ArrayList<Integer> format(int... counts) {
+  private static ArrayList<Integer> expectedInput(int... counts) {
     ArrayList input = new ArrayList<>();
     for (int i : counts) {
       input.add(i);
@@ -72,40 +72,49 @@ public class FallbackOptionsLBTest {
   }
 
   private static void checkNodeDownBehavior() throws SQLException {
-    startYBDBClusterWithReadReplica();
+    // Start RF=3 cluster with 6 nodes and with placements (127.0.0.1, 127.0.0.2, 127.0.0.3) -> us-west-1a,
+    // and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2b and 127.0.0.6 -> us-east-2c
+    startYBDBClusterWithSixNodes();
     String url = "jdbc:yugabytedb://127.0.0.4:5433/yugabyte?load-balance=true&topology-keys=";
 
     try {
-      createConnectionsAndVerify(url, "aws.us-west.us-west-1a", format(4, 4, 4));
+      createConnectionsAndVerify(url, "aws.us-west.us-west-1a", expectedInput(4, 4, 4));
       // stop 1,2,3 before moving ahead
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
-      createConnectionsAndVerify(url, "aws.us-west.us-west-1a", format(-1, -1, -1, 4, 4, 4));
+      createConnectionsAndVerify(url, "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 4, 4, 4));
       createConnectionsAndVerify("jdbc:yugabytedb://127.0.0.4:5433/yugabyte?load-balance=true&explicit-fallback-only=true&topology-keys=",
-          "aws.us-west.us-west-1a", format(-1, -1, -1, 12, 0, 0));
+          "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 12, 0, 0));
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
 
-  private static void startYBDBClusterWithReadReplica() {
+  /**
+   * Start RF=3 cluster with 6 nodes and with placements (127.0.0.1, 127.0.0.2, 127.0.0.3) -> us-west-1a,
+   * and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2b and 127.0.0.6 -> us-east-2c
+   */
+  private static void startYBDBClusterWithSixNodes() {
     executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
 
     executeCmd(path + "/bin/yb-ctl --rf 3 start --placement_info \"aws.us-west.us-west-1a\" " +
             "--tserver_flags \"placement_uuid=live,max_stale_read_bound_time_ms=60000000\"",
         "Start YugabyteDB rf=3 cluster", 15);
-    executeCmd(path + "/bin/yb-ctl add_node", "Add a node", 10);
-    executeCmd(path + "/bin/yb-ctl add_node", "Add a node", 10);
-    executeCmd(path + "/bin/yb-ctl add_node", "Add a node", 10);
-    executeCmd(path + "/bin/yb-admin -master_addresses 127.0.0.1:7100,127.0.0.2:7100," +
-        "127.0.0.3:7100 modify_placement_info aws.us-west.us-west-1a,aws.us-east.us-east-2a," +
-        "aws.us-east.us-east-1a 3 live", "Modify placement info", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-west.us-east-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-west.us-east-2b\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-west.us-east-2c\"",
+        "Add a node", 10);
     try {
       Thread.sleep(5000);
     } catch (InterruptedException ie) {}
   }
 
+  /**
+   * Start RF=3 cluster with placements 127.0.0.1 -> 2a, 127.0.0.2 -> 2b and 127.0.0.3 -> 2c
+   */
   private static void startYBDBCluster() {
     executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     executeCmd(path + "/bin/yb-ctl start --rf 3 --placement_info \"aws.us-west.us-west-2a,aws" +
@@ -156,12 +165,6 @@ public class FallbackOptionsLBTest {
       j++;
     }
     System.out.println("");
-//     verifyOn("127.0.0.1", cnt1, tkValue);
-//     System.out.print(", ");
-//     verifyOn("127.0.0.2", cnt2, tkValue);
-//     System.out.print(", ");
-//     verifyOn("127.0.0.3", cnt3, tkValue);
-//     System.out.println("");
     for (Connection con : connections) {
       if (con != null) {
         con.close();

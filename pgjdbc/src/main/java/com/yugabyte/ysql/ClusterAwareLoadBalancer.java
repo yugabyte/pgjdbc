@@ -34,6 +34,12 @@ import static com.yugabyte.ysql.LoadBalanceProperties.*;
 public class ClusterAwareLoadBalancer {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
+  /**
+   * The default value should ideally match the interval at which the server-list is updated at
+   * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
+   * not too low (1s).
+   */
+  static final int DEFAULT_FAILED_HOST_TTL_SECONDS = 5;
 
   private static volatile ClusterAwareLoadBalancer instance;
   private long lastServerListFetchTime = 0L;
@@ -266,7 +272,7 @@ public class ClusterAwareLoadBalancer {
     }
     lastServerListFetchTime = currTime;
     long now = System.currentTimeMillis() / 1000;
-    long failedHostTTL = Long.getLong("failed-host-ttl-seconds", 5);
+    long failedHostTTL = Long.getLong("failed-host-ttl-seconds", DEFAULT_FAILED_HOST_TTL_SECONDS);
     Set<String> possiblyReachableHosts = new HashSet();
     for (Map.Entry<String, Long> e : unreachableHosts.entrySet()) {
       if ((now - e.getValue()) > failedHostTTL) {

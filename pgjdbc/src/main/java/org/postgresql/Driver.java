@@ -493,6 +493,7 @@ public class Driver implements java.sql.Driver {
       }
       LOGGER.log(Level.WARNING, "Failed to apply load balance. Trying normal connection");
     }
+    // Attempt connection with the original properties
     return new PgConnection(hostSpecs(properties), user(properties), database(properties), properties, url);
   }
 
