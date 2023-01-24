@@ -471,9 +471,7 @@ public class Driver implements java.sql.Driver {
       }
       LOGGER.log(Level.WARNING, "Failed to apply load balance. Trying normal connection");
     }
-    // Cleanup extra properties used for load balancing
-    url = lbprops.getStrippedURL();
-    properties = lbprops.getStrippedProperties();
+    // Attempt connection with the original properties
     return new PgConnection(hostSpecs(properties), properties, url);
   }
 
