@@ -111,6 +111,8 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
     } else {
       for (Map.Entry<Integer, Set<CloudPlacement>> allowedCPs : allowedPlacements.entrySet()) {
         if (cp.isContainedIn(allowedCPs.getValue())) {
+          LOGGER.fine("CloudPlacement " + cp + " is part of fallback level "
+              + (allowedCPs.getKey() - 1));
           ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(allowedCPs.getKey(), k -> new ArrayList<>());
           hosts.add(host);
           if (!publicIp.trim().isEmpty()) {
@@ -147,6 +149,14 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       }
     }
     // If nothing works out, let it fallback to entire cluster nodes
+    boolean limitFallbackToGivenTKs = Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY);
+    if (limitFallbackToGivenTKs) {
+      return servers;
+    }
+    if (fallbackPrivateIPs.get(REST_OF_CLUSTER) != null) {
+      LOGGER.fine("Returning servers from rest of the cluster: "
+          + fallbackPrivateIPs.get(REST_OF_CLUSTER));
+    }
     return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(REST_OF_CLUSTER),
         fallbackPublicIPs.get(REST_OF_CLUSTER));
   }
