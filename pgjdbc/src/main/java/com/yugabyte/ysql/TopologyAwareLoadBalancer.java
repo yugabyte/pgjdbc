@@ -135,6 +135,47 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   }
 
   @Override
+  public synchronized void updateFailedHosts(String chosenHost) {
+    super.updateFailedHosts(chosenHost);
+    for(int i=FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE;i++){
+      if (fallbackPrivateIPs.get(i) != null && !fallbackPrivateIPs.get(i).isEmpty()) {
+        if(fallbackPrivateIPs.get(i).contains(chosenHost)){
+          ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(i, k -> new ArrayList<>());
+          hosts.remove(chosenHost);
+          LOGGER.log(Level.FINE,
+              getLoadBalancerType() + ": Removing failed host " + chosenHost
+                  + " from fallback level " + (i-1));
+          return;
+        }
+      }
+      if (fallbackPublicIPs.get(i) != null && !fallbackPublicIPs.get(i).isEmpty()) {
+        if(fallbackPublicIPs.get(i).contains(chosenHost)){
+          ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(i, k -> new ArrayList<>());
+          hosts.remove(chosenHost);
+          LOGGER.log(Level.FINE,
+              getLoadBalancerType() + ": Removing failed host " + chosenHost
+                  + " from fallback level " + (i-1));
+          return;
+        }
+      }
+    }
+    if(fallbackPrivateIPs.get(REST_OF_CLUSTER) != null){
+      if(fallbackPrivateIPs.get(REST_OF_CLUSTER).contains(chosenHost)){
+        ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
+        hosts.remove(chosenHost);
+        return;
+      }
+    }
+
+    if(fallbackPublicIPs.get(REST_OF_CLUSTER) != null){
+      if(fallbackPublicIPs.get(REST_OF_CLUSTER).contains(chosenHost)){
+        ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
+        hosts.remove(chosenHost);
+      }
+    }
+  }
+
+  @Override
   protected ArrayList<String> getPrivateOrPublicServers(ArrayList<String> privateHosts,
       ArrayList<String> publicHosts) {
     ArrayList<String> servers = super.getPrivateOrPublicServers(privateHosts, publicHosts);

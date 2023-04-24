@@ -3,6 +3,7 @@ package com.yugabyte;
 import org.postgresql.util.PSQLException;
 
 import com.yugabyte.ysql.LoadBalanceProperties;
+//import com.yugabyte.ysql.ClusterAwareLoadBalancer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -26,6 +27,8 @@ public class FallbackOptionsLBTest {
 
     checkBasicBehavior();
     checkNodeDownBehavior();
+    checkNodeDownBehaviorMultiFallback();
+    //checkNodeBackUpBehavior();
   }
 
   private static void checkBasicBehavior() throws SQLException {
@@ -89,6 +92,110 @@ public class FallbackOptionsLBTest {
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
+  }
+
+  private static void checkNodeDownBehaviorMultiFallback() throws SQLException {
+    // Start RF=3 cluster with 9 nodes and with placements (127.0.0.1, 127.0.0.2, 127.0.0.3) -> us-west-1a,
+    // and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2a and 127.0.0.6 -> eu-north-2a, 127.0.0.9 -> eu-north-2a,
+    // and 127.0.0.7 -> eu-west-2a, 127.0.0.8 -> eu-west-2a.
+    startYBDBClusterWithNineNodes();
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&topology-keys=";
+
+    try {
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(4, 4, 4, 0, 0, 0, 0, 0, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 12, -1, 0, 0, 0, 0, 0, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, 6, 6, 0, 0, 0, 0));
+
+
+      executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 0, 6, 6, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 6, -1, -1, 6));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 9", "Stop node 9", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 12, -1, -1, -1));
+
+    } finally {
+      executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
+    }
+  }
+
+  /*
+  private static void checkNodeBackUpBehavior() throws SQLException {
+    // Start RF=3 cluster with 9 nodes and with placements (127.0.0.1, 127.0.0.2, 127.0.0.3) -> us-west-1a,
+    // and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2a and 127.0.0.6 -> eu-north-2a, 127.0.0.9 -> eu-north-2a,
+    // and 127.0.0.7 -> eu-west-2a, 127.0.0.8 -> eu-west-2a.
+    startYBDBClusterWithNineNodes();
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&topology-keys=";
+
+    try {
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(4, 4, 4, 0, 0, 0, 0, 0, 0));
+      // stop 1,2,3 before moving ahead
+      executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 12, -1, 0, 0, 0, 0, 0, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, 6, 6, 0, 0, 0, 0));
+
+
+      executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 0, 6, 6, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 6, -1, -1, 6));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 9", "Stop node 9", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 12, -1, -1, -1));
+
+
+      executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"", "Start node 2", 10);
+      ClusterAwareLoadBalancer.forceRefresh = true;
+      try {
+        System.out.println("BEFORE");
+        Thread.sleep(10000);
+        System.out.println("after");
+      } catch (InterruptedException ie) {}
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 12, -1, -1, -1, 0, -1, -1, -1));
+
+    } finally {
+      executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
+    }
+  }
+*/
+
+  private static void startYBDBClusterWithNineNodes() {
+    executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
+
+    executeCmd(path + "/bin/yb-ctl --rf 3 start --placement_info \"aws.us-west.us-west-1a\" ",
+        "Start YugabyteDB rf=3 cluster", 15);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-north.eu-north-2a\"",
+        "Add a node", 10);
+
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-west.eu-west-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-west.eu-west-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-north.eu-north-2a\"",
+        "Add a node", 10);
+
+    try {
+      Thread.sleep(5000);
+    } catch (InterruptedException ie) {}
   }
 
   /**

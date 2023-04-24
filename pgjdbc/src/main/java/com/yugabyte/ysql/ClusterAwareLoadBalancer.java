@@ -202,7 +202,9 @@ public class ClusterAwareLoadBalancer {
       String zone = rs.getString("zone");
       hostPortMap.put(host, port);
       hostPortMapPublic.put(publicHost, port);
-      updateCurrentHostList(currentPrivateIps, host, publicHost, cloud, region, zone);
+      if(!unreachableHosts.containsKey(host)) {
+        updateCurrentHostList(currentPrivateIps, host, publicHost, cloud, region, zone);
+      }
       InetAddress hostInetAddr;
       InetAddress publicHostInetAddr;
       try {
@@ -266,10 +268,6 @@ public class ClusterAwareLoadBalancer {
     }
     // else clear server list
     long currTime = System.currentTimeMillis();
-    servers = getCurrentServers(conn);
-    if (servers == null) {
-      return false;
-    }
     lastServerListFetchTime = currTime;
     long now = System.currentTimeMillis() / 1000;
     long failedHostTTL = Long.getLong("failed-host-ttl-seconds", DEFAULT_FAILED_HOST_TTL_SECONDS);
@@ -285,8 +283,14 @@ public class ClusterAwareLoadBalancer {
       unreachableHosts.remove(h);
     }
 
+    servers = getCurrentServers(conn);
+    if (servers == null) {
+      return false;
+    }
+
     for (String h : servers) {
-      if (!hostToNumConnMap.containsKey(h)) {
+      if (!hostToNumConnMap.containsKey(h) && !unreachableHosts.containsKey(h)) {
+        LOGGER.fine("adding host" + h + " to host to num conn map ");
         hostToNumConnMap.put(h, 0);
       }
     }
