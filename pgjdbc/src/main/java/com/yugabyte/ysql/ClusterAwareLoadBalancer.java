@@ -45,6 +45,7 @@ public class ClusterAwareLoadBalancer {
   private long lastServerListFetchTime = 0L;
   private volatile ArrayList<String> servers = null;
   Map<String, Integer> hostToNumConnMap = new HashMap<>();
+  Map<String, Integer> hostToNumConnCount = new HashMap<>();
   Map<String, Long> unreachableHosts = new HashMap<String, Long>();
   protected Map<String, String> hostPortMap = new HashMap<>();
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
@@ -89,7 +90,11 @@ public class ClusterAwareLoadBalancer {
       if (servers != null && !servers.isEmpty()) {
         for (String h : servers) {
           if (!hostToNumConnMap.containsKey(h)) {
-            hostToNumConnMap.put(h, 0);
+            if(hostToNumConnCount.containsKey(h)){
+              hostToNumConnMap.put(h,hostToNumConnCount.get(h));
+            } else {
+              hostToNumConnMap.put(h, 0);
+            }
           }
         }
       } else {
@@ -134,7 +139,11 @@ public class ClusterAwareLoadBalancer {
         unreachableHosts.clear();
         for (String h : servers) {
           if (!hostToNumConnMap.containsKey(h)) {
-            hostToNumConnMap.put(h, 0);
+            if(hostToNumConnCount.containsKey(h)){
+              hostToNumConnMap.put(h,hostToNumConnCount.get(h));
+            } else {
+              hostToNumConnMap.put(h, 0);
+            }
           }
         }
         // base condition for this recursive call is useHostColumn != null
@@ -279,8 +288,20 @@ public class ClusterAwareLoadBalancer {
         LOGGER.fine("Not removing this host from unreachableHosts: " + e.getKey());
       }
     }
+
+    boolean emptyHostToNumConnMap=false;
     for (String h : possiblyReachableHosts) {
       unreachableHosts.remove(h);
+      emptyHostToNumConnMap=true;
+    }
+
+    if(emptyHostToNumConnMap==true && !hostToNumConnMap.isEmpty()){
+      LOGGER.fine("clearing host to num conn map " + hostToNumConnMap.keySet());
+      for(String h : hostToNumConnMap.keySet()) {
+        hostToNumConnCount.put(h,hostToNumConnMap.get(h));
+      }
+      LOGGER.fine("hosts in host to num conn count " + hostToNumConnMap.toString());
+      hostToNumConnMap.clear();
     }
 
     servers = getCurrentServers(conn);
@@ -291,7 +312,12 @@ public class ClusterAwareLoadBalancer {
     for (String h : servers) {
       if (!hostToNumConnMap.containsKey(h) && !unreachableHosts.containsKey(h)) {
         LOGGER.fine("adding host" + h + " to host to num conn map ");
-        hostToNumConnMap.put(h, 0);
+        if(hostToNumConnCount.containsKey(h)){
+          hostToNumConnMap.put(h,hostToNumConnCount.get(h));
+        }
+        else {
+          hostToNumConnMap.put(h, 0);
+        }
       }
     }
     return true;
