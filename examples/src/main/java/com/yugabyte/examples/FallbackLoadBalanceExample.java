@@ -31,23 +31,6 @@ public class FallbackLoadBalanceExample {
     checkMultiLevelFallback();
   }
 
-  public static void  ReadDataFromInput() {
-    try {
-      Thread.sleep(30000);
-    } catch (InterruptedException io) {
-    }
-    if(1==1)
-      return;
-    int firstNum, secondNum, result;
-    BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-    try {
-      System.out.print("Hit Enter:");
-      br.readLine();
-    } catch (IOException ioe) {
-      System.out.println(ioe);
-    }
-  }
-
 
   // Using HikariDataSource
   private static HikariDataSource ds = null;
@@ -66,135 +49,87 @@ public class FallbackLoadBalanceExample {
       input.put("127.0.0.1", 4);
       input.put("127.0.0.2", 3);
       input.put("127.0.0.3", 3);
-      ReadDataFromInput();
       verifyCount(input);
 
-      //createConnections(url, input);
-      // stop 1,2,3 before moving ahead
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
-      /*try {
+      try {
         Thread.sleep(30000);
       } catch (InterruptedException io) {
-      }*/
+      }
       input.clear();
       input.put("127.0.0.2", 5);
       input.put("127.0.0.3", 5);
-      ReadDataFromInput();
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
-      /*try {
+      try {
         Thread.sleep(30000);
       } catch (InterruptedException io) {
-      }*/
+      }
       input.clear();
-
       input.put("127.0.0.3", 10);
-      ReadDataFromInput();
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
-//       try {
-//         Thread.sleep(30000);
-//       } catch (InterruptedException io) {
-//       }
+      try {
+        Thread.sleep(30000);
+      } catch (InterruptedException io) {
+      }
       input.clear();
       input.put("127.0.0.4", 4);
       input.put("127.0.0.5", 3);
       input.put("127.0.0.6", 3);
-      ReadDataFromInput();
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
-//       try {
-//         Thread.sleep(30000);
-//       } catch (InterruptedException io) {
-//       }
-      input.clear();
-      input.put("127.0.0.5", 5);
-      input.put("127.0.0.6", 5);
-      ReadDataFromInput();
-      verifyCount(input);
-
-      executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
-//       try {
-//         Thread.sleep(30000);
-//       } catch (InterruptedException io) {
-//       }
-      input.clear();
-      input.put("127.0.0.6", 10);
-      ReadDataFromInput();
-      verifyCount(input);
-
-      executeCmd(path + "/bin/yb-ctl stop_node 6", "Stop node 6", 10);
-//       try {
-//         Thread.sleep(30000);
-//       } catch (InterruptedException io) {
-//       }
-      input.clear();
-      input.put("127.0.0.7", 4);
-      input.put("127.0.0.8", 3);
-      input.put("127.0.0.9", 3);
-      ReadDataFromInput();
-      verifyCount(input);
-
-      executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
-//       try {
-//         Thread.sleep(30000);
-//       } catch (InterruptedException io) {
-//       }
-      input.clear();
-      input.put("127.0.0.8", 5);
-      input.put("127.0.0.9", 5);
-      ReadDataFromInput();
-      verifyCount(input);
-
-      executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
-//       try {
-//         Thread.sleep(30000);
-//       } catch (InterruptedException io) {
-//       }
-      input.clear();
-      //input.put("127.0.0.2", 8);
-      input.put("127.0.0.9", 10);
-      ReadDataFromInput();
-      verifyCount(input);
-
-      /*
-      input.clear();
-      input.clear();
-      input.put("127.0.0.4", 4);
-      input.put("127.0.0.5", 4);
-      input.put("127.0.0.6", 4);
       try {
         Thread.sleep(30000);
       } catch (InterruptedException io) {
       }
-      createConnections(url, input);
-      // stop 4,5,6 before moving ahead
-      executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
+      input.clear();
+      input.put("127.0.0.5", 5);
+      input.put("127.0.0.6", 5);
+      verifyCount(input);
+
+      executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
       try {
-        Thread.sleep(60000);
+        Thread.sleep(30000);
       } catch (InterruptedException io) {
       }
-      executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
+      input.clear();
+      input.put("127.0.0.6", 10);
+      verifyCount(input);
+
       executeCmd(path + "/bin/yb-ctl stop_node 6", "Stop node 6", 10);
+      try {
+        Thread.sleep(30000);
+      } catch (InterruptedException io) {
+      }
       input.clear();
       input.put("127.0.0.7", 4);
-      input.put("127.0.0.8", 4);
-      input.put("127.0.0.9", 4);
-      createConnections(url, input);
+      input.put("127.0.0.8", 3);
+      input.put("127.0.0.9", 3);
+      verifyCount(input);
+
       executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
-      executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
-      executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"", "Start node 2", 10);
       try {
-        Thread.sleep(15000);
-      } catch (InterruptedException ie) {}
+        Thread.sleep(30000);
+      } catch (InterruptedException io) {
+      }
       input.clear();
-      input.put("127.0.0.2", 8);
-      input.put("127.0.0.9", 4);
-      createConnections(url, input);
-*/
+      input.put("127.0.0.8", 5);
+      input.put("127.0.0.9", 5);
+      verifyCount(input);
+
+      executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
+      try {
+        Thread.sleep(30000);
+      } catch (InterruptedException io) {
+      }
+      input.clear();
+      input.put("127.0.0.9", 10);
+      verifyCount(input);
+
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }

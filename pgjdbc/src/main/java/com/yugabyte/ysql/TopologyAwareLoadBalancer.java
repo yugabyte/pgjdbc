@@ -152,7 +152,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
         }
       }
     }
-    return -1;
+    return MAX_PREFERENCE_VALUE+1;
   }
 
   @Override

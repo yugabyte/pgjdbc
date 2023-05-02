@@ -573,7 +573,7 @@ public class Driver implements java.sql.Driver {
           if (betterNodeAvailable) {
             LOGGER.log(Level.FINE,
                 "A higher priority node than " + chosenHost + " is available");
-            //loadBalancer.updatehostToNummConnCount(chosenHost);
+            loadBalancer.decrementHostToNumConnCount(chosenHost);
             newConnection.close();
             return getConnectionBalanced(lbprops);
           }

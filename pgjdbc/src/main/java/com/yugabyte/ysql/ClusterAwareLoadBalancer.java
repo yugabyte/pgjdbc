@@ -372,7 +372,7 @@ public class ClusterAwareLoadBalancer {
     }
   }
 
-  /*public synchronized void updatehostToNummConnCount(String chosenHost){
+  public synchronized void decrementHostToNumConnCount(String chosenHost){
     LOGGER.log(Level.FINE, getLoadBalancerType() + ": decreasing connection count of {0} in hostToNummConnCount bu 1 as this connection is closed and a new connection with a more priority host will be created.",
         new String[]{chosenHost});
     Integer currentCount = hostToNumConnCount.get(chosenHost);
@@ -381,7 +381,7 @@ public class ClusterAwareLoadBalancer {
     } else {
       hostToNumConnCount.put(chosenHost, (currentCount - 1));
     }
-  }*/
+  }
 
   public Set<String> getUnreachableHosts() {
     return unreachableHosts.keySet();
