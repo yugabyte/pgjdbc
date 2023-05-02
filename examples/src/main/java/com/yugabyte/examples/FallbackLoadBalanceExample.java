@@ -46,6 +46,10 @@ public class FallbackLoadBalanceExample {
 
       ds = configureHikari(url);
       Map<String, Integer> input = new HashMap();
+      try {
+        Thread.sleep(30000);
+      } catch (InterruptedException io) {
+      }
       input.put("127.0.0.1", 4);
       input.put("127.0.0.2", 3);
       input.put("127.0.0.3", 3);
