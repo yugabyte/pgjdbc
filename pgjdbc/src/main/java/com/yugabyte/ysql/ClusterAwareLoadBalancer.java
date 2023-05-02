@@ -48,6 +48,7 @@ public class ClusterAwareLoadBalancer {
   Map<String, Integer> hostToNumConnCount = new HashMap<>();
   Map<String, Long> unreachableHosts = new HashMap<String, Long>();
   protected Map<String, String> hostPortMap = new HashMap<>();
+  final Map<String, Integer> hostToPriorityMap = new HashMap<>();
   protected Map<String, String> hostPortMapPublic = new HashMap<>();
   protected ArrayList<String> currentPublicIps = new ArrayList<>();
   protected Boolean useHostColumn = null;
@@ -82,7 +83,23 @@ public class ClusterAwareLoadBalancer {
     return port;
   }
 
+  public boolean hasMorePreferredNode(String chosenHost){
+    if(hostToPriorityMap.containsKey(chosenHost)) {
+      Object val = hostToPriorityMap.get(chosenHost);
+      if(val != null) {
+        int chosenHostPriority = ((Integer)val).intValue();
+        for (int i = 1; i < chosenHostPriority; i++) {
+          if (hostToPriorityMap.values().contains(i)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   public synchronized String getLeastLoadedServer(List<String> failedHosts) {
+    LOGGER.fine("Failed host list " + failedHosts + " hostToNumConnMap " + hostToNumConnMap);
     if ((hostToNumConnMap.isEmpty() && currentPublicIps.isEmpty())
         || Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY)) {
       // Try fallback on rest of the cluster nodes
@@ -125,6 +142,8 @@ public class ClusterAwareLoadBalancer {
       chosenHost = minConnectionsHostList.get(idx);
     }
     if (chosenHost != null) {
+      LOGGER.log(Level.FINE,
+          getLoadBalancerType() + ": Host chosen for new connection: " + chosenHost + "Calling updateConnectionMap");
       updateConnectionMap(chosenHost, 1);
     } else if (useHostColumn == null) {
       // Current host inet addr did not match with either host inet or public_ip inet addr AND
@@ -201,6 +220,7 @@ public class ClusterAwareLoadBalancer {
           PSQLState.UNKNOWN_STATE, e);
     }
 
+    hostToPriorityMap.clear();
     clearHostIPLists();
     while (rs.next()) {
       String host = rs.getString("host");
@@ -210,6 +230,12 @@ public class ClusterAwareLoadBalancer {
       String region = rs.getString("region");
       String zone = rs.getString("zone");
       hostPortMap.put(host, port);
+     if(this instanceof TopologyAwareLoadBalancer  && !unreachableHosts.containsKey(host)) {
+        int priority = getPriority(cloud, region, zone);
+        LOGGER.log(Level.FINE, "Priotity for host "
+            + host + " = " + priority);
+        hostToPriorityMap.put(host,priority);
+      }
       hostPortMapPublic.put(publicHost, port);
       if(!unreachableHosts.containsKey(host)) {
         updateCurrentHostList(currentPrivateIps, host, publicHost, cloud, region, zone);
@@ -238,6 +264,10 @@ public class ClusterAwareLoadBalancer {
       }
     }
     return getPrivateOrPublicServers(currentPrivateIps, currentPublicIps);
+  }
+
+ public int getPriority(String cloud,String region, String zone){
+  return 0;
   }
 
   protected void clearHostIPLists() {
@@ -283,6 +313,7 @@ public class ClusterAwareLoadBalancer {
     Set<String> possiblyReachableHosts = new HashSet();
     for (Map.Entry<String, Long> e : unreachableHosts.entrySet()) {
       if ((now - e.getValue()) > failedHostTTL) {
+        LOGGER.fine("Putting host  " + e.getKey() + " into possiblyReachableHosts");
         possiblyReachableHosts.add(e.getKey());
       } else {
         LOGGER.fine("Not removing this host from unreachableHosts: " + e.getKey());
@@ -341,6 +372,17 @@ public class ClusterAwareLoadBalancer {
     }
   }
 
+  /*public synchronized void updatehostToNummConnCount(String chosenHost){
+    LOGGER.log(Level.FINE, getLoadBalancerType() + ": decreasing connection count of {0} in hostToNummConnCount bu 1 as this connection is closed and a new connection with a more priority host will be created.",
+        new String[]{chosenHost});
+    Integer currentCount = hostToNumConnCount.get(chosenHost);
+    if (currentCount == null || currentCount == 0) {
+      return;
+    } else {
+      hostToNumConnCount.put(chosenHost, (currentCount - 1));
+    }
+  }*/
+
   public Set<String> getUnreachableHosts() {
     return unreachableHosts.keySet();
   }
@@ -348,6 +390,7 @@ public class ClusterAwareLoadBalancer {
   public synchronized void updateFailedHosts(String chosenHost) {
     unreachableHosts.putIfAbsent(chosenHost, System.currentTimeMillis() / 1000);
     hostToNumConnMap.remove(chosenHost);
+    hostToNumConnCount.remove(chosenHost);
   }
 
   protected String loadBalancingNodes() {

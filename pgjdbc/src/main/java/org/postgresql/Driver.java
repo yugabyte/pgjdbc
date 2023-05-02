@@ -569,6 +569,14 @@ public class Driver implements java.sql.Driver {
             // which the driver side may be doing
           }
         } else {
+          boolean betterNodeAvailable = loadBalancer.hasMorePreferredNode(chosenHost);
+          if (betterNodeAvailable) {
+            LOGGER.log(Level.FINE,
+                "A higher priority node than " + chosenHost + " is available");
+            //loadBalancer.updatehostToNummConnCount(chosenHost);
+            newConnection.close();
+            return getConnectionBalanced(lbprops);
+          }
           return newConnection;
         }
       } catch (SQLException ex) {

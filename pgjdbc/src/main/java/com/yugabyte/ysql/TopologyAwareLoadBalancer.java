@@ -135,6 +135,27 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   }
 
   @Override
+  public int getPriority(String cloud,String region, String zone){
+    CloudPlacement cp = new CloudPlacement(cloud, region, zone);
+    int priotrity = getKeysByValue(allowedPlacements,cp);
+    return priotrity;
+  }
+
+  public int getKeysByValue(Map<Integer, Set<CloudPlacement>> allowedPlacements, CloudPlacement cp) {
+    int i;
+    for (i = 1; i <= MAX_PREFERENCE_VALUE; i++) {
+      if (allowedPlacements.get(i) != null && !allowedPlacements.get(i).isEmpty()) {
+        if(cp.isContainedIn(allowedPlacements.get(i))){
+          LOGGER.log(Level.FINE,
+              "Returning priotity" + i );
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  @Override
   public synchronized void updateFailedHosts(String chosenHost) {
     super.updateFailedHosts(chosenHost);
     for(int i=FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE;i++){

@@ -44,7 +44,7 @@ public class FallbackLBTestExtended {
     // and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2a and 127.0.0.6 -> eu-north-2a, 127.0.0.9 -> eu-north-2a,
     // and 127.0.0.7 -> eu-west-2a, 127.0.0.8 -> eu-west-2a.
     startYBDBClusterWithNineNodes();
-    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&topology-keys=";
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=10&topology-keys=";
 
     try {
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(6, 6, 6, 0, 0, 0, 0, 0, 0));
@@ -62,26 +62,22 @@ public class FallbackLBTestExtended {
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 27, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"", "Start node 2", 10);
-      ClusterAwareLoadBalancer.forceRefresh = true;
       try {
-        Thread.sleep(5000);
+        Thread.sleep(15000);
       } catch (InterruptedException ie) {}
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 17, -1, -1, -1, 28, -1, -1, -1));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 18, -1, -1, -1, 27, -1, -1, -1));
 
-      ClusterAwareLoadBalancer.forceRefresh = false;
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 46, -1, -1, -1));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 45, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl start_node 5 --placement_info \"aws.us-east.us-east-2a\"", "Start node 5", 10);
-      ClusterAwareLoadBalancer.forceRefresh = true;
       try {
-        Thread.sleep(5000);
+        Thread.sleep(15000);
       } catch (InterruptedException ie) {}
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, 17, 47, -1, -1, -1));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, 18, 45, -1, -1, -1));
 
-      ClusterAwareLoadBalancer.forceRefresh = false;
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 65, -1, -1, -1));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 63, -1, -1, -1));
 
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);

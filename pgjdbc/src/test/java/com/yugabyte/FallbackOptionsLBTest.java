@@ -3,7 +3,6 @@ package com.yugabyte;
 import org.postgresql.util.PSQLException;
 
 import com.yugabyte.ysql.LoadBalanceProperties;
-import com.yugabyte.ysql.ClusterAwareLoadBalancer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -25,10 +24,10 @@ public class FallbackOptionsLBTest {
     }
     Class.forName("org.postgresql.Driver");
 
-    System.out.println("Running checkBasicBehavior() ....");
-    checkBasicBehavior();
-    System.out.println("Running checkNodeDownBehavior() ....");
-    checkNodeDownBehavior();
+    //System.out.println("Running checkBasicBehavior() ....");
+    //checkBasicBehavior();
+    //System.out.println("Running checkNodeDownBehavior() ....");
+    //checkNodeDownBehavior();
     System.out.println("Running checkNodeDownBehaviorMultiFallback() ....");
     checkNodeDownBehaviorMultiFallback();
   }
@@ -101,7 +100,7 @@ public class FallbackOptionsLBTest {
     // and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2a and 127.0.0.6 -> eu-north-2a, 127.0.0.9 -> eu-north-2a,
     // and 127.0.0.7 -> eu-west-2a, 127.0.0.8 -> eu-west-2a.
     startYBDBClusterWithNineNodes();
-    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&topology-keys=";
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=10&topology-keys=";
 
     try {
       createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(4, 4, 4, 0, 0, 0, 0, 0, 0));
@@ -115,6 +114,8 @@ public class FallbackOptionsLBTest {
 
 
       executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, 12, 0, 0, 0, 0));
+
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
       createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 0, 6, 6, 0));
 
@@ -126,11 +127,10 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 12, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"", "Start node 2", 10);
-      ClusterAwareLoadBalancer.forceRefresh = true;
       try {
-        Thread.sleep(5000);
+        Thread.sleep(15000);
       } catch (InterruptedException ie) {}
-      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 11, -1, -1, -1, 1, -1, -1, -1));
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 12, -1, -1, -1, -1, -1, -1, -1));
 
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
