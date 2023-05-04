@@ -52,27 +52,27 @@ public class FallbackLoadBalanceExample {
     try {
       ds = configureHikari(url);
       Map<String, Integer> input = new HashMap();
-      pause()
+      pause();
       input.put("127.0.0.1", 4);
       input.put("127.0.0.2", 4);
       input.put("127.0.0.3", 4);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.2", 6);
       input.put("127.0.0.3", 6);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.3", 12);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.4", 4);
       input.put("127.0.0.5", 4);
@@ -80,20 +80,20 @@ public class FallbackLoadBalanceExample {
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.5", 6);
       input.put("127.0.0.6", 6);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.6", 12);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 6", "Stop node 6", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.7", 4);
       input.put("127.0.0.8", 4);
@@ -101,14 +101,14 @@ public class FallbackLoadBalanceExample {
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.8", 6);
       input.put("127.0.0.9", 6);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
-      pause()
+      pause();
       input.clear();
       input.put("127.0.0.9", 12);
       verifyCount(input);
