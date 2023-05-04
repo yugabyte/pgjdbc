@@ -135,64 +135,105 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   }
 
   @Override
-  public int getPriority(String cloud,String region, String zone){
-    CloudPlacement cp = new CloudPlacement(cloud, region, zone);
-    int priotrity = getKeysByValue(allowedPlacements,cp);
-    return priotrity;
+  public boolean hasMorePreferredNode(String chosenHost) {
+    if (hostToPriorityMap.containsKey(chosenHost)) {
+      Object val = hostToPriorityMap.get(chosenHost);
+      if (val != null) {
+        int chosenHostPriority = ((Integer) val).intValue();
+        for (int i = 1; i < chosenHostPriority; i++) {
+          if (hostToPriorityMap.values().contains(i)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
-  public int getKeysByValue(Map<Integer, Set<CloudPlacement>> allowedPlacements, CloudPlacement cp) {
+  @Override
+  protected void updatePriorityMap(String host, String cloud, String region, String zone) {
+    if (!unreachableHosts.containsKey(host)) {
+      int priority = getPriority(cloud, region, zone);
+      LOGGER.log(Level.FINE, "Priority of host "
+          + host + " = " + priority);
+      hostToPriorityMap.put(host, priority);
+    }
+  }
+
+  private int getPriority(String cloud, String region, String zone) {
+    CloudPlacement cp = new CloudPlacement(cloud, region, zone);
+    return getKeysByValue(cp);
+  }
+
+  private int getKeysByValue(CloudPlacement cp) {
     int i;
     for (i = 1; i <= MAX_PREFERENCE_VALUE; i++) {
       if (allowedPlacements.get(i) != null && !allowedPlacements.get(i).isEmpty()) {
-        if(cp.isContainedIn(allowedPlacements.get(i))){
+        if (cp.isContainedIn(allowedPlacements.get(i))) {
           LOGGER.log(Level.FINE,
-              "Returning priotity" + i );
+              "Returning priority" + i);
           return i;
         }
       }
     }
-    return MAX_PREFERENCE_VALUE+1;
+    LOGGER.log(Level.FINE,
+        "CloudPlacement " + cp + " does not belong to Primary_Placement or any of the " +
+            "Fallback_Placements so returning " + MAX_PREFERENCE_VALUE + 1 + " as priority");
+    return MAX_PREFERENCE_VALUE + 1;
   }
 
   @Override
   public synchronized void updateFailedHosts(String chosenHost) {
     super.updateFailedHosts(chosenHost);
-    for(int i=FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE;i++){
+    for (int i = FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE; i++) {
       if (fallbackPrivateIPs.get(i) != null && !fallbackPrivateIPs.get(i).isEmpty()) {
-        if(fallbackPrivateIPs.get(i).contains(chosenHost)){
+        if (fallbackPrivateIPs.get(i).contains(chosenHost)) {
           ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(i, k -> new ArrayList<>());
           hosts.remove(chosenHost);
           LOGGER.log(Level.FINE,
               getLoadBalancerType() + ": Removing failed host " + chosenHost
-                  + " from fallback level " + (i-1));
+                  + " from fallback level " + (i - 1));
           return;
         }
       }
       if (fallbackPublicIPs.get(i) != null && !fallbackPublicIPs.get(i).isEmpty()) {
-        if(fallbackPublicIPs.get(i).contains(chosenHost)){
+        if (fallbackPublicIPs.get(i).contains(chosenHost)) {
           ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(i, k -> new ArrayList<>());
           hosts.remove(chosenHost);
           LOGGER.log(Level.FINE,
               getLoadBalancerType() + ": Removing failed host " + chosenHost
-                  + " from fallback level " + (i-1));
+                  + " from fallback level " + (i - 1));
           return;
         }
       }
     }
-    if(fallbackPrivateIPs.get(REST_OF_CLUSTER) != null){
-      if(fallbackPrivateIPs.get(REST_OF_CLUSTER).contains(chosenHost)){
-        ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
+    if (fallbackPrivateIPs.get(REST_OF_CLUSTER) != null) {
+      if (fallbackPrivateIPs.get(REST_OF_CLUSTER).contains(chosenHost)) {
+        ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(REST_OF_CLUSTER,
+            k -> new ArrayList<>());
         hosts.remove(chosenHost);
         return;
       }
     }
 
-    if(fallbackPublicIPs.get(REST_OF_CLUSTER) != null){
-      if(fallbackPublicIPs.get(REST_OF_CLUSTER).contains(chosenHost)){
-        ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
+    if (fallbackPublicIPs.get(REST_OF_CLUSTER) != null) {
+      if (fallbackPublicIPs.get(REST_OF_CLUSTER).contains(chosenHost)) {
+        ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(REST_OF_CLUSTER,
+            k -> new ArrayList<>());
         hosts.remove(chosenHost);
       }
+    }
+  }
+
+  @Override
+  public synchronized void decrementHostToNumConnCount(String chosenHost) {
+    LOGGER.log(Level.FINE, getLoadBalancerType() + ": decreasing connection count of {0} in " +
+            "hostToNumConnCount by 1 as this connection is closed and a new connection to a host " +
+            "with higher priority will be created",
+        new String[]{chosenHost});
+    Integer currentCount = hostToNumConnCount.get(chosenHost);
+    if (currentCount != null && currentCount != 0) {
+      hostToNumConnCount.put(chosenHost, (currentCount - 1));
     }
   }
 

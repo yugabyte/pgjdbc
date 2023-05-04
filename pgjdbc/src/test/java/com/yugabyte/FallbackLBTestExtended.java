@@ -44,10 +44,12 @@ public class FallbackLBTestExtended {
     // and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2a and 127.0.0.6 -> eu-north-2a, 127.0.0.9 -> eu-north-2a,
     // and 127.0.0.7 -> eu-west-2a, 127.0.0.8 -> eu-west-2a.
     startYBDBClusterWithNineNodes();
-    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=10&topology-keys=";
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
+        ".7:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=10&topology-keys=";
 
     try {
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(6, 6, 6, 0, 0, 0, 0, 0, 0));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
+          ".*:3,aws.eu-north.*:4", expectedInput(6, 6, 6, 0, 0, 0, 0, 0, 0));
 
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
@@ -56,28 +58,38 @@ public class FallbackLBTestExtended {
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 9, -1, -1, 9));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
+          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 9, -1, -1, 9));
 
       executeCmd(path + "/bin/yb-ctl stop_node 9", "Stop node 9", 10);
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 27, -1, -1, -1));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
+          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 27, -1, -1, -1));
 
-      executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"", "Start node 2", 10);
+      executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"",
+          "Start node 2", 10);
       try {
         Thread.sleep(15000);
-      } catch (InterruptedException ie) {}
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, 18, -1, -1, -1, 27, -1, -1, -1));
+      } catch (InterruptedException ie) {
+      }
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
+          ".*:3,aws.eu-north.*:4", expectedInput(-1, 18, -1, -1, -1, 27, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 45, -1, -1, -1));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
+          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 45, -1, -1, -1));
 
-      executeCmd(path + "/bin/yb-ctl start_node 5 --placement_info \"aws.us-east.us-east-2a\"", "Start node 5", 10);
+      executeCmd(path + "/bin/yb-ctl start_node 5 --placement_info \"aws.us-east.us-east-2a\"",
+          "Start node 5", 10);
       try {
         Thread.sleep(15000);
-      } catch (InterruptedException ie) {}
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, 18, 45, -1, -1, -1));
+      } catch (InterruptedException ie) {
+      }
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
+          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, 18, 45, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 63, -1, -1, -1));
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
+          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 63, -1, -1, -1));
 
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
@@ -91,7 +103,8 @@ public class FallbackLBTestExtended {
     executeCmd(path + "/bin/yb-ctl --rf 3 start --placement_info \"aws.us-west.us-west-1a\" ",
         "Start YugabyteDB rf=3 cluster", 15);
 
-    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?load-balance=true&topology-keys=";
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
+        ".7:5433/yugabyte?load-balance=true&topology-keys=";
 
     try {
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", expectedInput(6, 6, 6));
@@ -99,11 +112,13 @@ public class FallbackLBTestExtended {
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", expectedInput(-1, 15, 15));
 
-      executeCmd(path + "/bin/yb-ctl start_node 1 --placement_info \"aws.us-west.us-west-1a\"", "Start node 1", 10);
+      executeCmd(path + "/bin/yb-ctl start_node 1 --placement_info \"aws.us-west.us-west-1a\"",
+          "Start node 1", 10);
       ClusterAwareLoadBalancer.forceRefresh = true;
       try {
         Thread.sleep(5000);
-      } catch (InterruptedException ie) {}
+      } catch (InterruptedException ie) {
+      }
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", expectedInput(16, 16, 16));
 
     } finally {
@@ -132,7 +147,8 @@ public class FallbackLBTestExtended {
 
     try {
       Thread.sleep(5000);
-    } catch (InterruptedException ie) {}
+    } catch (InterruptedException ie) {
+    }
   }
 
   private static void executeCmd(String cmd, String msg, int timeout) {
@@ -151,7 +167,8 @@ public class FallbackLBTestExtended {
     }
   }
 
-  private static void createConnectionsWithoutCloseAndVerify(String url, String tkValue, ArrayList<Integer> counts) throws SQLException {
+  private static void createConnectionsWithoutCloseAndVerify(String url, String tkValue,
+      ArrayList<Integer> counts) throws SQLException {
     Connection[] connections = new Connection[numConnections];
     for (int i = 0; i < numConnections; i++) {
       try {
@@ -167,7 +184,7 @@ public class FallbackLBTestExtended {
         return;
       }
     }
-    System.out.println("Created "+ numConnections +" connections");
+    System.out.println("Created " + numConnections + " connections");
 
     int j = 1;
     System.out.print("Client backend processes on ");
@@ -198,11 +215,14 @@ public class FallbackLBTestExtended {
       // Server side validation
       if (expectedCount != (count.length - 1)) {
         throw new RuntimeException("Client backend processes did not match. (expected, actual): "
-            + expectedCount + ", " + (count.length-1));
+            + expectedCount + ", " + (count.length - 1));
       }
       // Client side validation
-      if ("skip".equals(tkValue)) return;
-      int recorded = LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(tkValue).getConnectionCountFor(server);
+      if ("skip".equals(tkValue)) {
+        return;
+      }
+      int recorded =
+          LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(tkValue).getConnectionCountFor(server);
       if (recorded != expectedCount) {
         throw new RuntimeException("Client side connection count didn't match. (expected, actual): "
             + expectedCount + ", " + recorded);

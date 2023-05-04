@@ -19,9 +19,10 @@ import java.io.*;
 
 public class FallbackLoadBalanceExample {
 
-  private static String zone2a = "aws.us-west.us-west-2a", zone2b = "aws.us-west.us-west-2b", zone2c = "aws.us-west.us-west-2c";
+  private static String zone2a = "aws.us-west.us-west-2a", zone2b = "aws.us-west.us-west-2b",
+      zone2c = "aws.us-west.us-west-2c";
   private static String s1 = "127.0.0.1", s2 = "127.0.0.2", s3 = "127.0.0.3";
-  private static int numConnections = 10;
+  private static int numConnections = 12;
   private static String path = System.getenv("YBDB_PATH");
 
 
@@ -31,107 +32,85 @@ public class FallbackLoadBalanceExample {
     checkMultiLevelFallback();
   }
 
+  public static void pause() {
+    System.out.println("Wait of 30 seconds for the Hikari connection pool to be created/repaired " +
+        "...");
+    try {
+      Thread.sleep(30000);
+    } catch (InterruptedException io) {
+    }
+  }
 
   // Using HikariDataSource
   private static HikariDataSource ds = null;
 
   private static void checkMultiLevelFallback() throws SQLException {
     startYBDBClusterWithNineNodes();
-    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte?&load-balance=true&loggerLevel=DEBUG";
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
+        ".7:5433/yugabyte?&load-balance=true&loggerLevel=DEBUG";
 
     try {
-
-      //This is just for demo purpose because right now default time for refresh is 5min
-      //and we don't want the user to wait that much in this app
-
       ds = configureHikari(url);
       Map<String, Integer> input = new HashMap();
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.put("127.0.0.1", 4);
-      input.put("127.0.0.2", 3);
-      input.put("127.0.0.3", 3);
+      input.put("127.0.0.2", 4);
+      input.put("127.0.0.3", 4);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
-      input.put("127.0.0.2", 5);
-      input.put("127.0.0.3", 5);
+      input.put("127.0.0.2", 6);
+      input.put("127.0.0.3", 6);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
-      input.put("127.0.0.3", 10);
+      input.put("127.0.0.3", 12);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
       input.put("127.0.0.4", 4);
-      input.put("127.0.0.5", 3);
-      input.put("127.0.0.6", 3);
+      input.put("127.0.0.5", 4);
+      input.put("127.0.0.6", 4);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
-      input.put("127.0.0.5", 5);
-      input.put("127.0.0.6", 5);
+      input.put("127.0.0.5", 6);
+      input.put("127.0.0.6", 6);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
-      input.put("127.0.0.6", 10);
+      input.put("127.0.0.6", 12);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 6", "Stop node 6", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
       input.put("127.0.0.7", 4);
-      input.put("127.0.0.8", 3);
-      input.put("127.0.0.9", 3);
+      input.put("127.0.0.8", 4);
+      input.put("127.0.0.9", 4);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
-      input.put("127.0.0.8", 5);
-      input.put("127.0.0.9", 5);
+      input.put("127.0.0.8", 6);
+      input.put("127.0.0.9", 6);
       verifyCount(input);
 
       executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
-      try {
-        Thread.sleep(30000);
-      } catch (InterruptedException io) {
-      }
+      pause()
       input.clear();
-      input.put("127.0.0.9", 10);
+      input.put("127.0.0.9", 12);
       verifyCount(input);
 
     } finally {
@@ -184,12 +163,14 @@ public class FallbackLoadBalanceExample {
     poolProperties.setProperty("validationTimeout", "2000");
     poolProperties.setProperty("keepaliveTime", "30000"); // 120000
     poolProperties.setProperty("connectionTestQuery", "select now()");
-    poolProperties.setProperty("connectionInitSql", "SET yb_read_from_followers=TRUE;SET yb_follower_read_staleness_ms=60000;SET default_transaction_read_only=TRUE;");
+    poolProperties.setProperty("connectionInitSql", "SET yb_read_from_followers=TRUE;SET " +
+        "yb_follower_read_staleness_ms=60000;SET default_transaction_read_only=TRUE;");
 
     poolProperties.setProperty("dataSource.user", "yugabyte");
     poolProperties.setProperty("dataSource.currentSchema", "yugabyte");
     poolProperties.setProperty("dataSource.url", url);
-    poolProperties.setProperty("dataSource.topologyKeys", "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3");
+    poolProperties.setProperty("dataSource.topologyKeys", "aws.us-west.*:1,aws.us-east.*:2,aws" +
+        ".eu-west.*:3");
     poolProperties.setProperty("dataSource.loadBalanceHosts", "true");
 
     HikariConfig hikariConfig = new HikariConfig(poolProperties);
@@ -213,27 +194,6 @@ public class FallbackLoadBalanceExample {
     }
   }
 
-  private static void createConnections(String url, Map<String, Integer> input) throws SQLException {
-    createConnections(url, "yugabyte", "yugabyte", input);
-  }
-
-  private static void createConnections(String url, String username, String password, Map<String, Integer> input) throws SQLException {
-    Connection[] conns = new Connection[numConnections];
-    for (int i = 0; i < numConnections; i++) {
-      conns[i] = ds.getConnection();
-      System.out.println("Created connection " + i);
-    }
-    System.out.println("Created " + numConnections + " connections");
-    verifyCount(input);
-    System.out.println("verify count done ");
-    int count = 0;
-    for (Connection con : conns) {
-      System.out.println("Clsoing connection "+ count);
-      count++;
-      con.close();
-    }
-  }
-
   private static void verifyCount(Map<String, Integer> input) {
     Iterator<Map.Entry<String, Integer>> it = input.entrySet().iterator();
     while (it.hasNext()) {
@@ -242,9 +202,10 @@ public class FallbackLoadBalanceExample {
     }
   }
 
+  private static ProcessBuilder builder = new ProcessBuilder();
+
   private static void verifyOn(String server, int expectedCount) {
     try {
-      ProcessBuilder builder = new ProcessBuilder();
       builder.command("sh", "-c", "curl http://" + server + ":13000/rpcz");
       Process process = builder.start();
       String result = new BufferedReader(new InputStreamReader(process.getInputStream()))
@@ -255,7 +216,8 @@ public class FallbackLoadBalanceExample {
         throw new RuntimeException("Could not access /rpcz on " + server);
       }
       String[] count = result.split("client backend");
-      System.out.println("Exit code: " + exitCode + ", Client backend processes on " + server + ": " + (count.length-1) + ", expected: " + expectedCount);
+      System.out.println("Exit code: " + exitCode + ", Client backend processes on " + server +
+          ": " + (count.length - 1) + ", expected: " + expectedCount);
     } catch (Exception e) {
       System.out.println("Exception in VerifyOn() " + e);
     }
