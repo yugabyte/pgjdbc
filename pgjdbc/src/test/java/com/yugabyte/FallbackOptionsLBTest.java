@@ -45,36 +45,23 @@ public class FallbackOptionsLBTest {
       conn.close();
 
       // All valid/available placement zones
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2c",
-          expectedInput(6, 0, 6));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws" +
-          ".us-west.us-west-2c:2", expectedInput(6, 6, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" +
-          ".us-west.us-west-2c:3", expectedInput(12, 0, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west" +
-          ".us-west-2c:2", expectedInput(4, 4, 4));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west" +
-          ".us-west-2c:3", expectedInput(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2c", expectedInput(6, 0, 6));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws" + ".us-west.us-west-2c:2", expectedInput(6, 6, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:3", expectedInput(12, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west" + ".us-west-2c:2", expectedInput(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west" + ".us-west-2c:3", expectedInput(4, 4, 4));
 
       // Some invalid/unavailable placement zones
-      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west" +
-          ".us-west-2c:3", expectedInput(0, 12, 0));
-      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west" +
-          ".us-west-2c:2", expectedInput(0, 6, 6));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west" +
-          ".us-west-2c:3", expectedInput(12, 0, 0));
-      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3",
-          expectedInput(0, 0, 12));
-      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.*:3",
-          expectedInput(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west" + ".us-west-2c:3", expectedInput(0, 12, 0));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west" + ".us-west-2c:2", expectedInput(0, 6, 6));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west" + ".us-west-2c:3", expectedInput(12, 0, 0));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", expectedInput(0, 0, 12));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.*:3", expectedInput(4, 4, 4));
 
       // Invalid preference value results in failure, value -1 indicates an error is expected.
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws" +
-          ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws" +
-          ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" +
-          ".us-west.us-west-2c:", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws" + ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:", expectedInput(-1, 0, 0));
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
@@ -101,8 +88,7 @@ public class FallbackOptionsLBTest {
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
       createConnectionsAndVerify(url, "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 4, 4, 4));
-      createConnectionsAndVerify("jdbc:yugabytedb://127.0.0" +
-              ".4:5433/yugabyte?load-balance=true&explicit-fallback-only=true&topology-keys=",
+      createConnectionsAndVerify("jdbc:yugabytedb://127.0.0.4:5433/yugabyte?load-balance=true&explicit-fallback-only=true&topology-keys=",
           "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 12, 0, 0));
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
@@ -207,8 +193,7 @@ public class FallbackOptionsLBTest {
         "Add a node", 10);
     try {
       Thread.sleep(5000);
-    } catch (InterruptedException ie) {
-    }
+    } catch (InterruptedException ie) {}
   }
 
   /**
@@ -236,8 +221,7 @@ public class FallbackOptionsLBTest {
     }
   }
 
-  private static void createConnectionsAndVerify(String url, String tkValue,
-      ArrayList<Integer> counts) throws SQLException {
+  private static void createConnectionsAndVerify(String url, String tkValue, ArrayList<Integer> counts) throws SQLException {
     Connection[] connections = new Connection[numConnections];
     for (int i = 0; i < numConnections; i++) {
       try {
