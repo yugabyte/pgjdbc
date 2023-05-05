@@ -137,9 +137,8 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   @Override
   public boolean hasMorePreferredNode(String chosenHost) {
     if (hostToPriorityMap.containsKey(chosenHost)) {
-      Object val = hostToPriorityMap.get(chosenHost);
-      if (val != null) {
-        int chosenHostPriority = ((Integer) val).intValue();
+      Integer chosenHostPriority = hostToPriorityMap.get(chosenHost);
+      if (chosenHostPriority != null) {
         for (int i = 1; i < chosenHostPriority; i++) {
           if (hostToPriorityMap.values().contains(i)) {
             return true;

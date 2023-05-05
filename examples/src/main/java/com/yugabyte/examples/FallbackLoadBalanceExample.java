@@ -47,7 +47,7 @@ public class FallbackLoadBalanceExample {
   private static void checkMultiLevelFallback() throws SQLException {
     startYBDBClusterWithNineNodes();
     String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
-        ".7:5433/yugabyte?&load-balance=true&loggerLevel=DEBUG";
+        ".7:5433/yugabyte?&load-balance=true";
 
     try {
       ds = configureHikari(url);
@@ -156,7 +156,7 @@ public class FallbackLoadBalanceExample {
     Properties poolProperties = new Properties();
     poolProperties.setProperty("poolName", "wellsfargo");
     poolProperties.setProperty("dataSourceClassName", ds_yb);
-    poolProperties.setProperty("maximumPoolSize", "10");
+    poolProperties.setProperty("maximumPoolSize", "12");
     poolProperties.setProperty("allowPoolSuspension", "true");
     poolProperties.setProperty("maxLifetime", "0");
     poolProperties.setProperty("idleTimeout", "0");
