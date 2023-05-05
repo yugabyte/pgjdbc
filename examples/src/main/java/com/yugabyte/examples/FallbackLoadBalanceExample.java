@@ -24,20 +24,52 @@ public class FallbackLoadBalanceExample {
   private static String s1 = "127.0.0.1", s2 = "127.0.0.2", s3 = "127.0.0.3";
   private static int numConnections = 12;
   private static String path = System.getenv("YBDB_PATH");
+  private static boolean verbose , interactive , debug ;
 
 
   public static void main(String[] args) throws ClassNotFoundException, SQLException {
 
-    System.out.println("Running checkMultiLevelFallback() ...");
+    verbose = Integer.parseInt(args[0]) == 1;
+    interactive = Integer.parseInt(args[1]) == 1;
+    debug = Integer.parseInt(args[2]) == 1;
+
+    if (verbose) {
+      System.out.println("Running checkMultiLevelFallback() ...");
+      System.out.println("You can verify the connections getting repaired on the server side using " +
+          "your browser, you can visit \"hostIP:13000/rpcz\" ... ");
+    }
     checkMultiLevelFallback();
   }
 
   public static void pause() {
-    System.out.println("Wait of 30 seconds for the Hikari connection pool to be created/repaired " +
-        "...");
-    try {
-      Thread.sleep(30000);
-    } catch (InterruptedException io) {
+    if (interactive) {
+      long start = 0, finish = 0, timeElapsed = 0, remainingTime = 0;
+      BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+      try {
+        System.out.print("Press ENTER to continue : ");
+        start = System.currentTimeMillis();
+        br.readLine();
+        finish = System.currentTimeMillis();
+        timeElapsed = finish - start;
+      } catch (IOException ioe) {
+        System.out.println(ioe);
+      }
+      if (timeElapsed < 30000) {
+        remainingTime = 30000 - timeElapsed;
+        System.out.println("Wait of " + remainingTime + " milliseconds for the Hikari connection pool " +
+            "to be created/repaired ...");
+        try {
+          Thread.sleep(remainingTime);
+        } catch (InterruptedException io) {
+        }
+      }
+    } else {
+      System.out.println("Wait of 30 seconds for the Hikari connection pool to be " +
+          "created/repaired ...");
+      try {
+        Thread.sleep(30000);
+      } catch (InterruptedException io) {
+      }
     }
   }
 
@@ -46,8 +78,14 @@ public class FallbackLoadBalanceExample {
 
   private static void checkMultiLevelFallback() throws SQLException {
     startYBDBClusterWithNineNodes();
-    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
-        ".7:5433/yugabyte?&load-balance=true";
+    String url;
+    if (debug) {
+      url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
+          ".7:5433/yugabyte?&load-balance=true&loggerLevel=DEBUG";
+    } else {
+      url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
+          ".7:5433/yugabyte?&load-balance=true";
+    }
 
     try {
       ds = configureHikari(url);

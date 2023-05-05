@@ -103,8 +103,7 @@ public class FallbackLBTestExtended {
     executeCmd(path + "/bin/yb-ctl --rf 3 start --placement_info \"aws.us-west.us-west-1a\" ",
         "Start YugabyteDB rf=3 cluster", 15);
 
-    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
-        ".7:5433/yugabyte?load-balance=true&topology-keys=";
+    String url = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?load-balance=true&topology-keys=";
 
     try {
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", expectedInput(6, 6, 6));

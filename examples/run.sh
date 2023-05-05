@@ -98,7 +98,7 @@ case $choice in
   3)
       echo "Starting FallbackLoadBalanceExample.java"
       classpath=target/jdbc-yugabytedb-example-0.0.1-SNAPSHOT.jar
-      java -cp $classpath com.yugabyte.examples.FallbackLoadBalanceExample
+      java -cp $classpath com.yugabyte.examples.FallbackLoadBalanceExample $VERBOSE $INTERACTIVE $DEBUG
       ;;
   *)
     echo "INVALID OPTION"
