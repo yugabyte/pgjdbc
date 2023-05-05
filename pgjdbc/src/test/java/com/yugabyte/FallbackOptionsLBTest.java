@@ -24,8 +24,12 @@ public class FallbackOptionsLBTest {
     }
     Class.forName("org.postgresql.Driver");
 
+    System.out.println("Running checkBasicBehavior() ....");
     checkBasicBehavior();
+    System.out.println("Running checkNodeDownBehavior() ....");
     checkNodeDownBehavior();
+    System.out.println("Running checkNodeDownBehaviorMultiFallback() ....");
+    checkNodeDownBehaviorMultiFallback();
   }
 
   private static void checkBasicBehavior() throws SQLException {
@@ -42,22 +46,22 @@ public class FallbackOptionsLBTest {
 
       // All valid/available placement zones
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2c", expectedInput(6, 0, 6));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", expectedInput(6, 6, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(12, 0, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west.us-west-2c:2", expectedInput(4, 4, 4));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a,aws.us-west.us-west-2b:1,aws" + ".us-west.us-west-2c:2", expectedInput(6, 6, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:3", expectedInput(12, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.*,aws.us-west.us-west-2b:1,aws.us-west" + ".us-west-2c:2", expectedInput(4, 4, 4));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.*:1,aws.us-west.us-west-2b:2,aws.us-west" + ".us-west-2c:3", expectedInput(4, 4, 4));
 
       // Some invalid/unavailable placement zones
-      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(0, 12, 0));
-      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:2", expectedInput(0, 6, 6));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", expectedInput(12, 0, 0));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west" + ".us-west-2c:3", expectedInput(0, 12, 0));
+      createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,aws.us-west.us-west-2b:2,aws.us-west" + ".us-west-2c:2", expectedInput(0, 6, 6));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,BAD.BAD.BAD:2,aws.us-west" + ".us-west-2c:3", expectedInput(12, 0, 0));
       createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.us-west-2c:3", expectedInput(0, 0, 12));
       createConnectionsAndVerify(baseUrl, "BAD.BAD.BAD:1,BAD.BAD.BAD:2,aws.us-west.*:3", expectedInput(4, 4, 4));
 
       // Invalid preference value results in failure, value -1 indicates an error is expected.
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:3", expectedInput(-1, 0, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws.us-west.us-west-2c:3", expectedInput(-1, 0, 0));
-      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:11,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws" + ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
+      createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:", expectedInput(-1, 0, 0));
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
@@ -88,6 +92,86 @@ public class FallbackOptionsLBTest {
           "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 12, 0, 0));
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
+    }
+  }
+
+  private static void checkNodeDownBehaviorMultiFallback() throws SQLException {
+    // Start RF=3 cluster with 9 nodes and with placements (127.0.0.1, 127.0.0.2, 127.0.0.3) ->
+    // us-west-1a,
+    // and 127.0.0.4 -> us-east-2a, 127.0.0.5 -> us-east-2a and 127.0.0.6 -> eu-north-2a, 127.0.0
+    // .9 -> eu-north-2a,
+    // and 127.0.0.7 -> eu-west-2a, 127.0.0.8 -> eu-west-2a.
+    startYBDBClusterWithNineNodes();
+    String url = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0" +
+        ".7:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=10&topology-keys=";
+
+    try {
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(4, 4, 4, 0, 0, 0, 0, 0, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 3", "Stop node 3", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(-1, 12, -1, 0, 0, 0, 0, 0, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(-1, -1, -1, 6, 6, 0, 0, 0, 0));
+
+
+      executeCmd(path + "/bin/yb-ctl stop_node 4", "Stop node 4", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(-1, -1, -1, -1, 12, 0, 0, 0, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 0, 6, 6, 0));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
+      executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 6, -1, -1, 6));
+
+      executeCmd(path + "/bin/yb-ctl stop_node 9", "Stop node 9", 10);
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 12, -1, -1, -1));
+
+      executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"",
+          "Start node 2", 10);
+      try {
+        Thread.sleep(15000);
+      } catch (InterruptedException ie) {
+      }
+      createConnectionsAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws" +
+          ".eu-north.*:4", expectedInput(-1, 12, -1, -1, -1, -1, -1, -1, -1));
+
+    } finally {
+      executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
+    }
+  }
+
+  private static void startYBDBClusterWithNineNodes() {
+    executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
+
+    executeCmd(path + "/bin/yb-ctl --rf 3 start --placement_info \"aws.us-west.us-west-1a\" ",
+        "Start YugabyteDB rf=3 cluster", 15);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-north.eu-north-2a\"",
+        "Add a node", 10);
+
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-west.eu-west-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-west.eu-west-2a\"",
+        "Add a node", 10);
+    executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.eu-north.eu-north-2a\"",
+        "Add a node", 10);
+
+    try {
+      Thread.sleep(5000);
+    } catch (InterruptedException ie) {
     }
   }
 
@@ -153,7 +237,7 @@ public class FallbackOptionsLBTest {
         return;
       }
     }
-    System.out.println("Created "+ numConnections +" connections");
+    System.out.println("Created " + numConnections + " connections");
 
     int j = 1;
     System.out.print("Client backend processes on ");
@@ -189,11 +273,14 @@ public class FallbackOptionsLBTest {
       // Server side validation
       if (expectedCount != (count.length - 1)) {
         throw new RuntimeException("Client backend processes did not match. (expected, actual): "
-            + expectedCount + ", " + (count.length-1));
+            + expectedCount + ", " + (count.length - 1));
       }
       // Client side validation
-      if ("skip".equals(tkValue)) return;
-      int recorded = LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(tkValue).getConnectionCountFor(server);
+      if ("skip".equals(tkValue)) {
+        return;
+      }
+      int recorded =
+          LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(tkValue).getConnectionCountFor(server);
       if (recorded != expectedCount) {
         throw new RuntimeException("Client side connection count didn't match. (expected, actual): "
             + expectedCount + ", " + recorded);
