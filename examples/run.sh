@@ -24,7 +24,7 @@ verbosePrint() {
 usage() {
           echo
           echo "Usage: $0 [-v] [-i] [-h] [-d] -D <path_to_yugabyte_installation>" 1>&2;
-          echo 
+          echo
           echo "-v - Run in verbose mode"
           echo "-i - Run in interactive mode"
           echo "-h - Print the help for this script"
@@ -32,35 +32,36 @@ usage() {
           echo "-d - Set log-level to 'debug' for driver"
           echo
           exit 1;
-        }              
+        }
 
 VERBOSE=0
 DEBUG=0
-INTERACTIVE=0                                               
+INTERACTIVE=0
 INSTALL_DIR=""
 
 while getopts ":vihdD:" o; do
-  case "$o" in                                             
-    v)                                                 
-      VERBOSE=1                                           
-      ;;                                               
-    i)                                                 
-      INTERACTIVE=1                                         
+  case "$o" in
+    v)
+      VERBOSE=1
+      ;;
+    i)
+      INTERACTIVE=1
       ;;
     d)
       DEBUG=1
       ;;
-    h)                                                 
+    h)
       usage
-      ;;                                               
-    D)                                                 
-      INSTALL_DIR=${OPTARG}                                     
-      ;;                                               
-    *)                                                 
-      usage                                             
-      ;;                                               
-  esac                                                  
-done   
+      ;;
+    D)
+      INSTALL_DIR=${OPTARG}
+      export YBDB_PATH=${OPTARG}
+      ;;
+    *)
+      usage
+      ;;
+  esac
+done
 
 if [ -z $INSTALL_DIR ]
 then
@@ -81,6 +82,7 @@ verbosePrint $VERBOSE "YugabyteDB installation directory is: $INSTALL_DIR"
 echo "Choose one of the below options"
 echo "1. Demonstrate Uniform Load Balance"
 echo "2. Demonstrate Topology Aware Load Balance"
+echo "3. Demonstrate Fallback feature of Topology Aware Load Balance"
 read -p "Please enter your option and then press enter:" choice
 echo ""
 
@@ -89,10 +91,15 @@ case $choice in
     verbosePrint $VERBOSE "starting the uniform_load_balance_run.sh script"
     ./uniform_load_balance_run.sh $VERBOSE $INTERACTIVE $DEBUG $INSTALL_DIR
     ;;
-  2) 
+  2)
     verbosePrint $VERBOSE "starting the topology_aware_load_balance_run.sh script"
     ./topology_aware_load_balance_run.sh $VERBOSE $INTERACTIVE $DEBUG $INSTALL_DIR
     ;;
+  3)
+      echo "Starting FallbackLoadBalanceExample.java"
+      classpath=target/jdbc-yugabytedb-example-0.0.1-SNAPSHOT.jar
+      java -cp $classpath com.yugabyte.examples.FallbackLoadBalanceExample $VERBOSE $INTERACTIVE $DEBUG
+      ;;
   *)
     echo "INVALID OPTION"
     exit 1
