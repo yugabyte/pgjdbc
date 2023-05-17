@@ -16,6 +16,7 @@ package com.yugabyte.ysql;
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.GT;
 import org.postgresql.util.PSQLException;
+import org.postgresql.util.HostSpec;
 import org.postgresql.util.PSQLState;
 
 import java.net.InetAddress;
@@ -30,8 +31,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.yugabyte.ysql.LoadBalanceProperties.*;
+import static org.postgresql.Driver.hostSpecs;
 
-public class ClusterAwareLoadBalancer {
+public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
   /**
@@ -127,6 +129,7 @@ public class ClusterAwareLoadBalancer {
     // Choose a random from the minimum list
     String chosenHost = null;
     if (minConnectionsHostList.size() > 0) {
+      // Implement this in PGX and other language drivers
       int idx = ThreadLocalRandom.current().nextInt(0, minConnectionsHostList.size());
       chosenHost = minConnectionsHostList.get(idx);
     }
@@ -194,20 +197,7 @@ public class ClusterAwareLoadBalancer {
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     ArrayList<String> currentPrivateIps = new ArrayList<>();
     String hostConnectedTo = ((PgConnection) conn).getQueryExecutor().getHostSpec().getHost();
-    InetAddress hostConnectedInetAddr;
-
-    boolean isIpv6Addresses = hostConnectedTo.contains(":");
-    if (isIpv6Addresses) {
-      hostConnectedTo = hostConnectedTo.replace("[", "").replace("]", "");
-    }
-
-    try {
-      hostConnectedInetAddr = InetAddress.getByName(hostConnectedTo);
-    } catch (UnknownHostException e) {
-      // This is totally unexpected. As the connection is already created on this host
-      throw new PSQLException(GT.tr("Unexpected UnknownHostException for ${0} ", hostConnectedTo),
-          PSQLState.UNKNOWN_STATE, e);
-    }
+    InetAddress hostConnectedInetAddr = LoadBalanceUtils.getConnectedInetAddr(conn);
 
     hostToPriorityMap.clear();
     clearHostIPLists();
@@ -280,7 +270,7 @@ public class ClusterAwareLoadBalancer {
     }
   }
 
-  protected String getLoadBalancerType() {
+  public String getLoadBalancerType() {
     return "ClusterAwareLoadBalancer";
   }
 
@@ -373,6 +363,121 @@ public class ClusterAwareLoadBalancer {
 
   public void setForRefresh() {
     lastServerListFetchTime = 0L;
+  }
+
+  @Override
+  public Connection getConnection(LoadBalanceProperties loadBalanceProperties, String user,
+      String dbName) {
+    LOGGER.log(Level.FINE, "GetConnectionBalanced called");
+    LoadBalancer loadBalancer = loadBalanceProperties.getAppropriateLoadBalancer();
+    Properties props = loadBalanceProperties.getStrippedProperties();
+    String url = loadBalanceProperties.getStrippedURL();
+    Set<String> unreachableHosts = loadBalancer.getUnreachableHosts();
+    List<String> failedHosts = new ArrayList<>(unreachableHosts);
+    String chosenHost = loadBalancer.getLeastLoadedServer(failedHosts);
+    PgConnection newConnection = null;
+    Connection controlConnection = null;
+    SQLException firstException = null;
+    if (chosenHost == null) {
+      boolean connectionCreated = false;
+      boolean gotException = false;
+      try {
+        HostSpec[] hspec = hostSpecs(loadBalanceProperties.getOriginalProperties());
+        controlConnection = new PgConnection(hspec, user, dbName, props, url);
+        connectionCreated = true;
+        if (!loadBalancer.refresh(controlConnection)) {
+          LOGGER.log(Level.WARNING, "yb_servers() refresh failed in first"
+              + " attempt itself. Falling back to default behaviour");
+          return null;
+        }
+        controlConnection.close();
+      } catch (SQLException ex) {
+        if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
+          return null;
+        }
+        gotException = true;
+      } finally {
+        if (gotException && connectionCreated) {
+          try {
+            controlConnection.close();
+          } catch (SQLException throwables) {
+            // ignore it was to be closed
+          }
+        }
+      }
+      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts);
+    }
+    if (chosenHost == null) {
+      return null;
+    }
+    // refresh can also fail on a particular server so try in loop till
+    // options are exhausted
+    while (chosenHost != null) {
+      try {
+        props.setProperty("PGHOST", chosenHost);
+        String port = loadBalancer.getPort(chosenHost);
+        if (port != null) {
+          props.setProperty("PGPORT", port);
+        }
+        newConnection = new PgConnection(
+            hostSpecs(props), user, dbName, props, url);
+        newConnection.setLoadBalancer(loadBalancer);
+        if (!loadBalancer.refresh(newConnection)) {
+          // There seems to be a problem with the current chosen host as well.
+          // Close the connection and try next
+          LOGGER.log(Level.WARNING, "yb_servers() refresh returned no servers");
+          loadBalancer.updateConnectionMap(chosenHost, -1);
+          failedHosts.add(chosenHost);
+          // but let the refresh be forced the next time it is tried.
+          loadBalancer.setForRefresh();
+          try {
+            newConnection.close();
+          } catch (Exception e) {
+            // ignore as exception is expected. This close is for any other cleanup
+            // which the driver side may be doing
+          }
+        } else {
+          boolean betterNodeAvailable = loadBalancer.hasMorePreferredNode(chosenHost);
+          if (betterNodeAvailable) {
+            LOGGER.log(Level.FINE,
+                "A higher priority node than " + chosenHost + " is available");
+            loadBalancer.decrementHostToNumConnCount(chosenHost);
+            newConnection.close();
+            return getConnection(loadBalanceProperties, user, dbName);
+          }
+          return newConnection;
+        }
+      } catch (SQLException ex) {
+        // Let the refresh be forced the next time it is tried.
+        loadBalancer.setForRefresh();
+        // close the connection for any cleanup. We can ignore the exception here
+        try {
+          newConnection.close();
+        } catch (Exception e) {
+          // ignore as the connection is already bad that's why we are here. Calling
+          // close so that client side cleanup can happen.
+        }
+        failedHosts.add(chosenHost);
+        if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
+          if (firstException == null) {
+            firstException = ex;
+          }
+          // TODO log exception go to the next one after adding to failed list
+          LOGGER.log(Level.FINE,
+              "couldn't connect to " + chosenHost + ", adding it to failed host list");
+          loadBalancer.updateFailedHosts(chosenHost);
+        } else {
+          // Log the exception. Consider other failures as temporary and not as serious as
+          // PSQLState.CONNECTION_UNABLE_TO_CONNECT. So for other failures it will be ignored
+          // only in this attempt, instead of adding it in the failed host list of the
+          // load balancer itself because it won't be tried till the next refresh happens.
+          LOGGER.log(Level.WARNING,
+              "got exception " + ex.getMessage() + ", while connecting to " + chosenHost);
+        }
+      }
+      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts);
+    }
+    return null;
   }
 
   public void printHostToConnMap() {
