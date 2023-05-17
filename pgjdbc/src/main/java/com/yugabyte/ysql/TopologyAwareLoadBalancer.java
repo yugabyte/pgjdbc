@@ -47,7 +47,8 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       }
       TopologyAwareLoadBalancer.CloudPlacement cp = new TopologyAwareLoadBalancer.CloudPlacement(
           placementParts[0], placementParts[1], placementParts[2]);
-      LOGGER.log(Level.FINE, "Adding placement " + cp + " to allowed list");
+      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Adding placement " + cp + " to allowed "
+          + "list");
       allowedPlacements.add(cp);
     }
   }
@@ -263,7 +264,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
         fallbackPublicIPs.get(REST_OF_CLUSTER));
   }
 
-  protected String getLoadBalancerType() {
+  public String getLoadBalancerType() {
     return "TopologyAwareLoadBalancer";
   }
 

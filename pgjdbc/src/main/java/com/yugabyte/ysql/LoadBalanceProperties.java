@@ -12,7 +12,18 @@
 //
 package com.yugabyte.ysql;
 
-import java.util.*;
+import org.postgresql.jdbc.PgConnection;
+import org.postgresql.util.GT;
+import org.postgresql.util.PSQLException;
+import org.postgresql.util.PSQLState;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -180,7 +191,7 @@ public class LoadBalanceProperties {
     return ybURL;
   }
 
-  public ClusterAwareLoadBalancer getAppropriateLoadBalancer() {
+  public LoadBalancer getAppropriateLoadBalancer() {
     if (!hasLoadBalance) {
       throw new IllegalStateException(
           "This method is expected to be called only when load-balance is true");
