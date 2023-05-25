@@ -192,7 +192,9 @@ public class FallbackOptionsLBTest {
     executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-west.us-east-2c\"",
         "Add a node", 10);
     try {
-      Thread.sleep(5000);
+      System.out.println("Waiting 5 seconds for the cluster to be up...");
+      Thread.sleep(10000);
+      System.out.println("Done waiting 5 seconds for the cluster to be up");
     } catch (InterruptedException ie) {}
   }
 

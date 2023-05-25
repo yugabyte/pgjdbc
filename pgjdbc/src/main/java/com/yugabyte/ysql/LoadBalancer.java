@@ -7,10 +7,12 @@ import java.util.Set;
 
 public interface LoadBalancer {
 
+  // todo trim this list down
   public String getLoadBalancerType();
   public boolean needsRefresh();
   public boolean refresh(Connection conn) throws SQLException;
   public Connection getConnection(LoadBalanceProperties lbProps, String user, String dbName);
+
   public Set<String> getUnreachableHosts();
   public String getLeastLoadedServer(List<String> failedHosts);
   public String getPort(String chosenHost);
