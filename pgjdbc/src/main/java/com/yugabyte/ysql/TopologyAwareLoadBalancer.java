@@ -16,19 +16,25 @@ package com.yugabyte.ysql;
 import static com.yugabyte.ysql.LoadBalanceProperties.*;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
-public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
+public class TopologyAwareLoadBalancer implements LoadBalancer {
+  protected static final Logger LOGGER = Logger.getLogger(TopologyAwareLoadBalancer.class.getName());
   private final String placements;
   private final Map<Integer, Set<CloudPlacement>> allowedPlacements = new HashMap<>();
-  private final Map<Integer, ArrayList<String>> fallbackPrivateIPs = new HashMap<>();
-  private final Map<Integer, ArrayList<String>> fallbackPublicIPs = new HashMap<>();
   private final int PRIMARY_PLACEMENTS = 1;
   private final int FIRST_FALLBACK = 2;
   private final int REST_OF_CLUSTER = -1;
+  private int currentPlacementIndex = 1;
+  List<String> attempted = new ArrayList<>();
+  private int refreshIntervalSeconds;
+
 
   public TopologyAwareLoadBalancer(String placementValues) {
     placements = placementValues;
+    refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);
     parseGeoLocations();
   }
 
@@ -36,21 +42,21 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
     return placements;
   }
 
-  private void populatePlacementSet(String placements, Set<TopologyAwareLoadBalancer.CloudPlacement> allowedPlacements) {
-    String[] pStrings = placements.split(LOCATIONS_DELIMITER);
-    for (String pl : pStrings) {
-      String[] placementParts = pl.split("\\.");
-      if (placementParts.length != 3 || placementParts[0].equals("*") || placementParts[1].equals("*")) {
-        // Return an error so the user takes corrective action.
-        LOGGER.log(Level.WARNING, "Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property value: " + pl);
-        throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property value: " + pl);
-      }
-      TopologyAwareLoadBalancer.CloudPlacement cp = new TopologyAwareLoadBalancer.CloudPlacement(
-          placementParts[0], placementParts[1], placementParts[2]);
-      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Adding placement " + cp + " to allowed "
-          + "list");
-      allowedPlacements.add(cp);
+  private void populatePlacementSet(String placement,
+      Set<TopologyAwareLoadBalancer.CloudPlacement> allowedPlacements) {
+    String[] placementParts = placement.split("\\.");
+    if (placementParts.length != 3 || placementParts[0].equals("*") || placementParts[1].equals(
+        "*")) {
+      // Return an error so the user takes corrective action.
+      LOGGER.log(Level.WARNING,
+          "Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property value: " + placement);
+      throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property " +
+          "value: " + placement);
     }
+    TopologyAwareLoadBalancer.CloudPlacement cp = new TopologyAwareLoadBalancer.CloudPlacement(
+        placementParts[0], placementParts[1], placementParts[2]);
+    LOGGER.fine(getLoadBalancerType() + ": Adding placement " + cp + " to allowed " + "list");
+    allowedPlacements.add(cp);
   }
 
   private void parseGeoLocations() {
@@ -65,20 +71,9 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
         populatePlacementSet(v[0], primary);
       } else {
         int pref = Integer.valueOf(v[1]);
-        if (pref == 1) {
-          Set<TopologyAwareLoadBalancer.CloudPlacement> primary = allowedPlacements.get(PRIMARY_PLACEMENTS);
-          if (primary == null) {
-            primary = new HashSet<>();
-            allowedPlacements.put(PRIMARY_PLACEMENTS, primary);
-          }
-          populatePlacementSet(v[0], primary);
-        } else if (pref > 1 && pref <= MAX_PREFERENCE_VALUE) {
-          Set<TopologyAwareLoadBalancer.CloudPlacement> fallbackPlacements = allowedPlacements.get(pref);
-          if (fallbackPlacements == null) {
-            fallbackPlacements = new HashSet<>();
-            allowedPlacements.put(pref, fallbackPlacements);
-          }
-          populatePlacementSet(v[0], fallbackPlacements);
+        if (pref > 0 && pref <= MAX_PREFERENCE_VALUE) {
+          Set<TopologyAwareLoadBalancer.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref, k -> new HashSet<>());
+          populatePlacementSet(v[0], cpSet);
         } else {
           throw new IllegalArgumentException("Invalid preference value for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
         }
@@ -87,181 +82,89 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
   }
 
   @Override
-  protected void clearHostIPLists() {
-    super.clearHostIPLists();
-    for (ArrayList<String> hosts : fallbackPrivateIPs.values()) {
-      hosts.clear();
-    }
-    for (ArrayList<String> publicIPs : fallbackPublicIPs.values()) {
-      publicIPs.clear();
-    }
+  public int getRefreshListSeconds() {
+    return Integer.getInteger(REFRESH_INTERVAL_KEY, refreshIntervalSeconds);
   }
 
   @Override
-  protected void updateCurrentHostList(ArrayList<String> currentPrivateIps, String host,
-      String publicIp, String cloud, String region, String zone) {
-    CloudPlacement cp = new CloudPlacement(cloud, region, zone);
-    if (cp.isContainedIn(allowedPlacements.get(PRIMARY_PLACEMENTS))) {
-      LOGGER.log(Level.FINE,
-          getLoadBalancerType() + ": allowedPlacements set: "
-              + allowedPlacements + " returned contains true for cp: " + cp);
-      currentPrivateIps.add(host);
-      if (!publicIp.trim().isEmpty()) {
-        currentPublicIps.add(publicIp);
+  public boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e) {
+    Set<CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
+    boolean onlyExplicitFallback = Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY);
+    boolean found = (currentPlacementIndex == REST_OF_CLUSTER && !onlyExplicitFallback)
+        || (set != null && e.getValue().getPlacement().isContainedIn(set));
+    boolean isAttempted = attempted.contains(e.getKey());
+    boolean isDown = e.getValue().isDown();
+    LOGGER.info(e.getKey() + " has required placement? " + found + ", isDown? " + isDown + ", attempted? " + isAttempted);
+    return found
+        && !isAttempted
+        && !isDown;
+  }
+
+  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts) {
+    LOGGER.info("failedHosts: " + failedHosts);
+    if (newRequest) {
+      LOGGER.info("new request ");
+      currentPlacementIndex = PRIMARY_PLACEMENTS;
+    }
+    ArrayList<String> hosts = null;
+    String chosenHost = null;
+    while (chosenHost == null && currentPlacementIndex <= MAX_PREFERENCE_VALUE) {
+      attempted = failedHosts;
+      hosts = LoadBalanceManager.getAllEligibleHosts(this);
+
+      int min = Integer.MAX_VALUE;
+      ArrayList<String> minConnectionsHostList = new ArrayList<>();
+      for (String h : hosts) {
+        if (failedHosts.contains(h)) {
+          LOGGER.info("Skipping failed host " + h);
+          continue;
+        }
+        int currLoad = LoadBalanceManager.getLoad(h);
+        LOGGER.info("Number of connections to " + h + ": " + currLoad);
+        if (currLoad < min) {
+          min = currLoad;
+          minConnectionsHostList.clear();
+          minConnectionsHostList.add(h);
+        } else if (currLoad == min) {
+          minConnectionsHostList.add(h);
+        }
       }
-    } else {
-      for (Map.Entry<Integer, Set<CloudPlacement>> allowedCPs : allowedPlacements.entrySet()) {
-        if (cp.isContainedIn(allowedCPs.getValue())) {
-          LOGGER.fine("CloudPlacement " + cp + " is part of fallback level "
-              + (allowedCPs.getKey() - 1));
-          ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(allowedCPs.getKey(), k -> new ArrayList<>());
-          hosts.add(host);
-          if (!publicIp.trim().isEmpty()) {
-            ArrayList<String> publicIPs = fallbackPublicIPs.computeIfAbsent(allowedCPs.getKey(), k -> new ArrayList<>());
-            publicIPs.add(publicIp);
+      // Choose a random from the minimum list
+      if (minConnectionsHostList.size() > 0) {
+        int idx = ThreadLocalRandom.current().nextInt(0, minConnectionsHostList.size());
+        chosenHost = minConnectionsHostList.get(idx);
+      }
+      if (chosenHost != null) {
+        LOGGER.fine("Host chosen for new connection: " + chosenHost);
+//         updateConnectionMap(chosenHost, 1);
+        LoadBalanceManager.incrementConnectionCount(chosenHost);
+//     } else if (useHostColumn == null) {
+        // Current host inet addr did not match with either host inet or public_ip inet addr AND
+        // Now we have exhausted the servers list which was populated with (private) host values.
+        // So try connecting to the public_ips.
+//       return null;
+      } else {
+        LOGGER.info("chosenHost is null for placement level " + currentPlacementIndex);
+        LOGGER.info("allowedPlacements " + allowedPlacements);
+        currentPlacementIndex += 1;
+        while (allowedPlacements.get(currentPlacementIndex) == null && currentPlacementIndex > 0) {
+          currentPlacementIndex += 1;
+          if (currentPlacementIndex > MAX_PREFERENCE_VALUE) {
+            // All explicit fallbacks are done with no luck. Now try rest-of-cluster
+            currentPlacementIndex = REST_OF_CLUSTER;
+          } else if (currentPlacementIndex == 0) {
+            // Even rest-of-cluster did not help. Quit
+            break;
           }
-          return;
         }
-      }
-      // Maintain the list of hosts which do not quality for any preference zone.
-      // Use it as THE LAST fallback - the entire cluster nodes.
-      ArrayList<String> remainingHosts = fallbackPrivateIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
-      remainingHosts.add(host);
-      ArrayList<String> remainingPublicIPs = fallbackPublicIPs.computeIfAbsent(REST_OF_CLUSTER, k -> new ArrayList<>());
-      remainingPublicIPs.add(publicIp);
-      LOGGER.log(Level.FINE,
-          getLoadBalancerType() + ": allowedPlacements set: " + allowedPlacements
-              + " returned contains false for cp: " + cp);
-    }
-  }
-
-  @Override
-  public boolean hasMorePreferredNode(String chosenHost) {
-    if (hostToPriorityMap.containsKey(chosenHost)) {
-      Integer chosenHostPriority = hostToPriorityMap.get(chosenHost);
-      if (chosenHostPriority != null) {
-        for (int i = 1; i < chosenHostPriority; i++) {
-          if (hostToPriorityMap.values().contains(i)) {
-            return true;
-          }
+        if (currentPlacementIndex == 0) {
+          break;
         }
+        LOGGER.info("Will be trying placement level " + currentPlacementIndex + " next.");
       }
     }
-    return false;
-  }
-
-  @Override
-  protected void updatePriorityMap(String host, String cloud, String region, String zone) {
-    if (!unreachableHosts.containsKey(host)) {
-      int priority = getPriority(cloud, region, zone);
-      LOGGER.log(Level.FINE, "Priority of host "
-          + host + " = " + priority);
-      hostToPriorityMap.put(host, priority);
-    }
-  }
-
-  private int getPriority(String cloud, String region, String zone) {
-    CloudPlacement cp = new CloudPlacement(cloud, region, zone);
-    return getKeysByValue(cp);
-  }
-
-  private int getKeysByValue(CloudPlacement cp) {
-    int i;
-    for (i = 1; i <= MAX_PREFERENCE_VALUE; i++) {
-      if (allowedPlacements.get(i) != null && !allowedPlacements.get(i).isEmpty()) {
-        if (cp.isContainedIn(allowedPlacements.get(i))) {
-          LOGGER.log(Level.FINE,
-              "Returning priority" + i);
-          return i;
-        }
-      }
-    }
-    LOGGER.log(Level.FINE,
-        "CloudPlacement " + cp + " does not belong to Primary_Placement or any of the " +
-            "Fallback_Placements so returning " + MAX_PREFERENCE_VALUE + 1 + " as priority");
-    return MAX_PREFERENCE_VALUE + 1;
-  }
-
-  @Override
-  public synchronized void updateFailedHosts(String chosenHost) {
-    super.updateFailedHosts(chosenHost);
-    for (int i = FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE; i++) {
-      if (fallbackPrivateIPs.get(i) != null && !fallbackPrivateIPs.get(i).isEmpty()) {
-        if (fallbackPrivateIPs.get(i).contains(chosenHost)) {
-          ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(i, k -> new ArrayList<>());
-          hosts.remove(chosenHost);
-          LOGGER.log(Level.FINE,
-              getLoadBalancerType() + ": Removing failed host " + chosenHost
-                  + " from fallback level " + (i - 1));
-          return;
-        }
-      }
-      if (fallbackPublicIPs.get(i) != null && !fallbackPublicIPs.get(i).isEmpty()) {
-        if (fallbackPublicIPs.get(i).contains(chosenHost)) {
-          ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(i, k -> new ArrayList<>());
-          hosts.remove(chosenHost);
-          LOGGER.log(Level.FINE,
-              getLoadBalancerType() + ": Removing failed host " + chosenHost
-                  + " from fallback level " + (i - 1));
-          return;
-        }
-      }
-    }
-    if (fallbackPrivateIPs.get(REST_OF_CLUSTER) != null) {
-      if (fallbackPrivateIPs.get(REST_OF_CLUSTER).contains(chosenHost)) {
-        ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(REST_OF_CLUSTER,
-            k -> new ArrayList<>());
-        hosts.remove(chosenHost);
-        return;
-      }
-    }
-
-    if (fallbackPublicIPs.get(REST_OF_CLUSTER) != null) {
-      if (fallbackPublicIPs.get(REST_OF_CLUSTER).contains(chosenHost)) {
-        ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(REST_OF_CLUSTER,
-            k -> new ArrayList<>());
-        hosts.remove(chosenHost);
-      }
-    }
-  }
-
-  @Override
-  public synchronized void decrementHostToNumConnCount(String chosenHost) {
-    LOGGER.log(Level.FINE, getLoadBalancerType() + ": decreasing connection count of {0} in " +
-            "hostToNumConnCount by 1 as this connection is closed and a new connection to a host " +
-            "with higher priority will be created",
-        new String[]{chosenHost});
-    Integer currentCount = hostToNumConnCount.get(chosenHost);
-    if (currentCount != null && currentCount != 0) {
-      hostToNumConnCount.put(chosenHost, (currentCount - 1));
-    }
-  }
-
-  @Override
-  protected ArrayList<String> getPrivateOrPublicServers(ArrayList<String> privateHosts,
-      ArrayList<String> publicHosts) {
-    ArrayList<String> servers = super.getPrivateOrPublicServers(privateHosts, publicHosts);
-    if (servers != null && !servers.isEmpty()) {
-      return servers;
-    }
-    // If no servers are available in primary placements then attempt fallback nodes.
-    for (int i = FIRST_FALLBACK; i <= MAX_PREFERENCE_VALUE; i++) {
-      if (fallbackPrivateIPs.get(i) != null && !fallbackPrivateIPs.get(i).isEmpty()) {
-        LOGGER.info("Attempting to connect servers in fallback level-" + (i - 1) + " ...");
-        return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(i), fallbackPublicIPs.get(i));
-      }
-    }
-    // If nothing works out, let it fallback to entire cluster nodes
-    boolean limitFallbackToGivenTKs = Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY);
-    if (limitFallbackToGivenTKs) {
-      return servers;
-    }
-    if (fallbackPrivateIPs.get(REST_OF_CLUSTER) != null) {
-      LOGGER.fine("Returning servers from rest of the cluster: "
-          + fallbackPrivateIPs.get(REST_OF_CLUSTER));
-    }
-    return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(REST_OF_CLUSTER),
-        fallbackPublicIPs.get(REST_OF_CLUSTER));
+    LOGGER.info("Host chosen for new connection: " + chosenHost);
+    return chosenHost;
   }
 
   public String getLoadBalancerType() {

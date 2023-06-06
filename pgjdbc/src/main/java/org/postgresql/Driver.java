@@ -23,7 +23,7 @@ package org.postgresql;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
-import com.yugabyte.ysql.LoadBalancer;
+import com.yugabyte.ysql.LoadBalanceManager;
 
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.DriverInfo;
@@ -39,8 +39,6 @@ import org.postgresql.util.PSQLState;
 import org.postgresql.util.SharedTimer;
 import org.postgresql.util.URLCoder;
 
-import com.yugabyte.ysql.ClusterAwareLoadBalancer;
-import com.yugabyte.ysql.LoadBalanceProperties;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.IOException;
@@ -56,7 +54,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -487,17 +484,10 @@ public class Driver implements java.sql.Driver {
    * @throws SQLException if the connection could not be made
    */
   private static Connection makeConnection(String url, Properties properties) throws SQLException {
-    LoadBalanceProperties lbprops = new LoadBalanceProperties(url, properties);
-    // Cleanup extra properties used for load balancing
-    url = lbprops.getStrippedURL();
-    properties = lbprops.getStrippedProperties();
-    if (lbprops.hasLoadBalance()) {
-      Connection conn = lbprops.getAppropriateLoadBalancer().getConnection(lbprops,
-          user(properties), database(properties));
-      if (conn != null) {
-        return conn;
-      }
-      LOGGER.log(Level.WARNING, "Failed to apply load balance. Trying normal connection");
+    Connection connection = LoadBalanceManager.getConnection(url, properties, user(properties),
+        database(properties));
+    if (connection != null) {
+      return connection;
     }
     return new PgConnection(hostSpecs(properties), user(properties), database(properties),
         properties, url);

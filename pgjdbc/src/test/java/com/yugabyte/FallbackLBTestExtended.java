@@ -1,5 +1,7 @@
 package com.yugabyte;
 
+import com.yugabyte.ysql.LoadBalanceManager;
+
 import org.postgresql.util.PSQLException;
 
 import com.yugabyte.ysql.LoadBalanceProperties;
@@ -220,8 +222,7 @@ public class FallbackLBTestExtended {
       if ("skip".equals(tkValue)) {
         return;
       }
-      int recorded =
-          LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(tkValue).getConnectionCountFor(server);
+      int recorded = LoadBalanceManager.getLoad(server);
       if (recorded != expectedCount) {
         throw new RuntimeException("Client side connection count didn't match. (expected, actual): "
             + expectedCount + ", " + recorded);

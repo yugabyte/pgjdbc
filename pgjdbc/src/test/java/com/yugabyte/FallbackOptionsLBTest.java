@@ -1,5 +1,7 @@
 package com.yugabyte;
 
+import com.yugabyte.ysql.LoadBalanceManager;
+
 import org.postgresql.util.PSQLException;
 
 import com.yugabyte.ysql.LoadBalanceProperties;
@@ -11,6 +13,8 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
 
 public class FallbackOptionsLBTest {
   private static int numConnections = 12;
@@ -63,6 +67,8 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws" + ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:", expectedInput(-1, 0, 0));
     } finally {
+      LoadBalanceManager.clearManager();
+      CONNECTION_MANAGER_MAP.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -91,6 +97,8 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify("jdbc:yugabytedb://127.0.0.4:5433/yugabyte?load-balance=true&explicit-fallback-only=true&topology-keys=",
           "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 12, 0, 0));
     } finally {
+      LoadBalanceManager.clearManager();
+      CONNECTION_MANAGER_MAP.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -146,6 +154,8 @@ public class FallbackOptionsLBTest {
           ".eu-north.*:4", expectedInput(-1, 12, -1, -1, -1, -1, -1, -1, -1));
 
     } finally {
+      LoadBalanceManager.clearManager();
+      CONNECTION_MANAGER_MAP.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -192,9 +202,9 @@ public class FallbackOptionsLBTest {
     executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-west.us-east-2c\"",
         "Add a node", 10);
     try {
-      System.out.println("Waiting 5 seconds for the cluster to be up...");
+      System.out.println("Waiting 10 seconds for the cluster to be up...");
       Thread.sleep(10000);
-      System.out.println("Done waiting 5 seconds for the cluster to be up");
+      System.out.println("Done waiting 10 seconds for the cluster to be up");
     } catch (InterruptedException ie) {}
   }
 
@@ -281,8 +291,7 @@ public class FallbackOptionsLBTest {
       if ("skip".equals(tkValue)) {
         return;
       }
-      int recorded =
-          LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(tkValue).getConnectionCountFor(server);
+      int recorded = LoadBalanceManager.getLoad(server);
       if (recorded != expectedCount) {
         throw new RuntimeException("Client side connection count didn't match. (expected, actual): "
             + expectedCount + ", " + recorded);
