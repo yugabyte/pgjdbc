@@ -12,15 +12,7 @@
 //
 package com.yugabyte.ysql;
 
-import org.postgresql.jdbc.PgConnection;
-import org.postgresql.util.GT;
-import org.postgresql.util.PSQLException;
-import org.postgresql.util.PSQLState;
-
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.sql.Connection;
-import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -52,24 +44,37 @@ public class LoadBalanceProperties {
    load-balance 'simple' to be used as KEY and for targeted topologies,
     <placements> value specified will be used as key
    */
-  public static final Map<String, ClusterAwareLoadBalancer> CONNECTION_MANAGER_MAP =
+  public static final Map<String, LoadBalancer> CONNECTION_MANAGER_MAP =
       new HashMap<>();
 
   private final String originalUrl;
   private final Properties originalProperties;
-  private final Properties strippedProperties;
   private boolean hasLoadBalance;
   private final String ybURL;
   private String placements = null;
   private int refreshInterval = -1;
   private boolean explicitFallbackOnly;
 
+//   private static HashMap<LBPropertiesKey, LoadBalanceProperties> lbPropsMap = new HashMap<>();
+
+//   public static LoadBalanceProperties getLBProperties(String url, Properties properties) {
+//     LBPropertiesKey key = new LBPropertiesKey(url, properties);
+//     LoadBalanceProperties lbProps = lbPropsMap.get(key);
+//     if (lbProps == null) {
+//       synchronized (lbPropsMap) {
+//         lbProps = lbPropsMap.get(key);
+//         if (lbProps == null) {
+//           lbProps = new LoadBalanceProperties(url, properties);
+//           lbPropsMap.put(key, lbProps);
+//         }
+//       }
+//     }
+//     return lbProps;
+//   }
+
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
-    originalProperties = origProperties;
-    strippedProperties = (Properties) origProperties.clone();
-    strippedProperties.remove(LOAD_BALANCE_PROPERTY_KEY);
-    strippedProperties.remove(TOPOLOGY_AWARE_PROPERTY_KEY);
+    originalProperties = (Properties) origProperties.clone();
     ybURL = processURLAndProperties();
   }
 
@@ -175,10 +180,6 @@ public class LoadBalanceProperties {
     return originalProperties;
   }
 
-  public Properties getStrippedProperties() {
-    return strippedProperties;
-  }
-
   public boolean hasLoadBalance() {
     return hasLoadBalance;
   }
@@ -196,7 +197,11 @@ public class LoadBalanceProperties {
       throw new IllegalStateException(
           "This method is expected to be called only when load-balance is true");
     }
-    ClusterAwareLoadBalancer ld = null;
+    // todo Find a better way to pass/update these properties. Currently, lb instance is
+    //  singleton, so cannot include these in it.
+    System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
+    System.setProperty(EXPLICIT_FALLBACK_ONLY_KEY, String.valueOf(explicitFallbackOnly));
+    LoadBalancer ld = null;
     if (placements == null) {
       // return base class conn manager.
       ld = CONNECTION_MANAGER_MAP.get(SIMPLE_LB);
@@ -221,10 +226,28 @@ public class LoadBalanceProperties {
         }
       }
     }
-    // todo Find a better way to pass/update these properties. Currently, lb instance is
-    //  singleton, so cannot include these in it.
-    System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
-    System.setProperty(EXPLICIT_FALLBACK_ONLY_KEY, String.valueOf(explicitFallbackOnly));
     return ld;
   }
+
+//   static class LBPropertiesKey {
+//     String url;
+//     Properties properties;
+//
+//     public LBPropertiesKey(String url, Properties properties) {
+//       this.url = url;
+//       this.properties = properties;
+//     }
+//     @Override
+//     public boolean equals(Object other) {
+//       if (other == null) return false;
+//       if (!(other instanceof LBPropertiesKey)) return false;
+//       LBPropertiesKey o = (LBPropertiesKey) other;
+//       return this.properties.equals(o.properties) && this.url.equals(o.url);
+//     }
+//
+//     @Override
+//     public int hashCode() {
+//       return Arrays.hashCode(new Object[]{url.hashCode(), properties.hashCode()});
+//     }
+//   }
 }

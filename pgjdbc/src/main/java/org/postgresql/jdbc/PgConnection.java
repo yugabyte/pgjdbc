@@ -22,6 +22,8 @@ package org.postgresql.jdbc;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
+import com.yugabyte.ysql.LoadBalanceManager;
+
 import org.postgresql.Driver;
 import org.postgresql.PGNotification;
 import org.postgresql.PGProperty;
@@ -772,7 +774,7 @@ public class PgConnection implements BaseConnection {
     openStackTrace = null;
     String host = queryExecutor.getHostSpec().getHost();
     if (loadBalancer != null && host != null) {
-      loadBalancer.updateConnectionMap(host, -1);
+      LoadBalanceManager.decrementConnectionCount(host);
     }
   }
 
