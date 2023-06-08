@@ -23,9 +23,8 @@ import java.util.logging.Logger;
 public class TopologyAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER = Logger.getLogger(TopologyAwareLoadBalancer.class.getName());
   private final String placements;
-  private final Map<Integer, Set<CloudPlacement>> allowedPlacements = new HashMap<>();
+  private final Map<Integer, Set<LoadBalanceManager.CloudPlacement>> allowedPlacements = new HashMap<>();
   private final int PRIMARY_PLACEMENTS = 1;
-  private final int FIRST_FALLBACK = 2;
   private final int REST_OF_CLUSTER = -1;
   private int currentPlacementIndex = 1;
   List<String> attempted = new ArrayList<>();
@@ -43,7 +42,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   }
 
   private void populatePlacementSet(String placement,
-      Set<TopologyAwareLoadBalancer.CloudPlacement> allowedPlacements) {
+      Set<LoadBalanceManager.CloudPlacement> allowedPlacements) {
     String[] placementParts = placement.split("\\.");
     if (placementParts.length != 3 || placementParts[0].equals("*") || placementParts[1].equals(
         "*")) {
@@ -53,7 +52,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property " +
           "value: " + placement);
     }
-    TopologyAwareLoadBalancer.CloudPlacement cp = new TopologyAwareLoadBalancer.CloudPlacement(
+    LoadBalanceManager.CloudPlacement cp = new LoadBalanceManager.CloudPlacement(
         placementParts[0], placementParts[1], placementParts[2]);
     LOGGER.fine(getLoadBalancerType() + ": Adding placement " + cp + " to allowed " + "list");
     allowedPlacements.add(cp);
@@ -67,12 +66,12 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         throw new IllegalArgumentException("Invalid value part for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
       }
       if (v.length == 1) {
-        Set<TopologyAwareLoadBalancer.CloudPlacement> primary = allowedPlacements.computeIfAbsent(PRIMARY_PLACEMENTS, k -> new HashSet<>());
+        Set<LoadBalanceManager.CloudPlacement> primary = allowedPlacements.computeIfAbsent(PRIMARY_PLACEMENTS, k -> new HashSet<>());
         populatePlacementSet(v[0], primary);
       } else {
         int pref = Integer.valueOf(v[1]);
         if (pref > 0 && pref <= MAX_PREFERENCE_VALUE) {
-          Set<TopologyAwareLoadBalancer.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref, k -> new HashSet<>());
+          Set<LoadBalanceManager.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref, k -> new HashSet<>());
           populatePlacementSet(v[0], cpSet);
         } else {
           throw new IllegalArgumentException("Invalid preference value for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
@@ -88,7 +87,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
 
   @Override
   public boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e) {
-    Set<CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
+    Set<LoadBalanceManager.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
     boolean onlyExplicitFallback = Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY);
     boolean found = (currentPlacementIndex == REST_OF_CLUSTER && !onlyExplicitFallback)
         || (set != null && e.getValue().getPlacement().isContainedIn(set));
@@ -105,8 +104,12 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     if (newRequest) {
       LOGGER.info("new request ");
       currentPlacementIndex = PRIMARY_PLACEMENTS;
+    } else {
+      LOGGER.info("Placements: [" + placements
+          + "]. Attempting to connect to servers in fallback level-"
+          + (currentPlacementIndex-1) + " ...");
     }
-    ArrayList<String> hosts = null;
+    ArrayList<String> hosts;
     String chosenHost = null;
     while (chosenHost == null && currentPlacementIndex <= MAX_PREFERENCE_VALUE) {
       attempted = failedHosts;
@@ -136,7 +139,6 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       }
       if (chosenHost != null) {
         LOGGER.fine("Host chosen for new connection: " + chosenHost);
-//         updateConnectionMap(chosenHost, 1);
         LoadBalanceManager.incrementConnectionCount(chosenHost);
 //     } else if (useHostColumn == null) {
         // Current host inet addr did not match with either host inet or public_ip inet addr AND
@@ -171,55 +173,4 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     return "TopologyAwareLoadBalancer";
   }
 
-  static class CloudPlacement {
-    private final String cloud;
-    private final String region;
-    private final String zone;
-
-    CloudPlacement(String cloud, String region, String zone) {
-      this.cloud = cloud;
-      this.region = region;
-      this.zone = zone;
-    }
-
-    public boolean isContainedIn(Set<CloudPlacement> set) {
-      if (this.zone.equals("*")) {
-        for (CloudPlacement cp : set) {
-          if (cp.cloud.equalsIgnoreCase(this.cloud) && cp.region.equalsIgnoreCase(this.region)) {
-            return true;
-          }
-        }
-      } else {
-        for (CloudPlacement cp : set) {
-          if (cp.cloud.equalsIgnoreCase(this.cloud)
-              && cp.region.equalsIgnoreCase(this.region)
-              && (cp.zone.equalsIgnoreCase(this.zone) || cp.zone.equals("*"))) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    public int hashCode() {
-      return cloud.hashCode() ^ region.hashCode() ^ zone.hashCode();
-    }
-
-    public boolean equals(Object other) {
-      boolean equal = false;
-      LOGGER.log(Level.FINE, "equals called for this: " + this + " and other = " + other);
-      if (other instanceof CloudPlacement) {
-        CloudPlacement o = (CloudPlacement) other;
-        equal = this.cloud.equalsIgnoreCase(o.cloud) &&
-            this.region.equalsIgnoreCase(o.region) &&
-            this.zone.equalsIgnoreCase(o.zone);
-      }
-      LOGGER.log(Level.FINE, "equals returning: " + equal);
-      return equal;
-    }
-
-    public String toString() {
-      return "Placement: " + cloud + "." + region + "." + zone;
-    }
-  }
 }

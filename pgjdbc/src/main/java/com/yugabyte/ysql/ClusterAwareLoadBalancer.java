@@ -27,12 +27,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   static final int DEFAULT_FAILED_HOST_TTL_SECONDS = 5;
 
   private static volatile ClusterAwareLoadBalancer instance;
-  private long lastServerListFetchTime = 0L;
-  private volatile ArrayList<String> servers = null;
-  Map<String, Integer> hostToNumConnMap = new HashMap<>();
   List<String> attempted = new ArrayList<>();
-  protected Map<String, String> hostPortMap = new HashMap<>();
-  protected Map<String, String> hostPortMapPublic = new HashMap<>();
 
   @Override
   public int getRefreshListSeconds() {
@@ -60,14 +55,6 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       }
     }
     return instance;
-  }
-
-  public String getPort(String host) {
-    String port = hostPortMap.get(host);
-    if (port == null) {
-      port = hostPortMapPublic.get(host);
-    }
-    return port;
   }
 
   @Override
@@ -105,8 +92,6 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       chosenHost = minConnectionsHostList.get(idx);
     }
     if (chosenHost != null) {
-      LOGGER.fine("Host chosen for new connection: " + chosenHost);
-//       updateConnectionMap(chosenHost, 1);
       LoadBalanceManager.incrementConnectionCount(chosenHost);
 //     } else if (useHostColumn == null) {
       // Current host inet addr did not match with either host inet or public_ip inet addr AND
@@ -124,20 +109,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     return "ClusterAwareLoadBalancer";
   }
 
-  public List<String> getServers() {
-    return Collections.unmodifiableList(servers);
-  }
-
   protected String loadBalancingNodes() {
     return "all";
-  }
-
-  public void printHostToConnMap() {
-    System.out.println("Current load on " + loadBalancingNodes() + " servers");
-    System.out.println("-------------------");
-    for (Map.Entry<String, Integer> e : hostToNumConnMap.entrySet()) {
-      System.out.println(e.getKey() + " - " + e.getValue());
-    }
   }
 
 }

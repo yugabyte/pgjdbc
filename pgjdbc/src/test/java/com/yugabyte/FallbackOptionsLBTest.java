@@ -67,7 +67,7 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws" + ".us-west.us-west-2c:3", expectedInput(-1, 0, 0));
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:", expectedInput(-1, 0, 0));
     } finally {
-      LoadBalanceManager.clearManager();
+      LoadBalanceManager.clear();
       CONNECTION_MANAGER_MAP.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
@@ -97,7 +97,7 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify("jdbc:yugabytedb://127.0.0.4:5433/yugabyte?load-balance=true&explicit-fallback-only=true&topology-keys=",
           "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 12, 0, 0));
     } finally {
-      LoadBalanceManager.clearManager();
+      LoadBalanceManager.clear();
       CONNECTION_MANAGER_MAP.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
@@ -154,7 +154,7 @@ public class FallbackOptionsLBTest {
           ".eu-north.*:4", expectedInput(-1, 12, -1, -1, -1, -1, -1, -1, -1));
 
     } finally {
-      LoadBalanceManager.clearManager();
+      LoadBalanceManager.clear();
       CONNECTION_MANAGER_MAP.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }

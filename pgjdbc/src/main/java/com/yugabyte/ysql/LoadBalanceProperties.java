@@ -12,7 +12,6 @@
 //
 package com.yugabyte.ysql;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -54,23 +53,6 @@ public class LoadBalanceProperties {
   private String placements = null;
   private int refreshInterval = -1;
   private boolean explicitFallbackOnly;
-
-//   private static HashMap<LBPropertiesKey, LoadBalanceProperties> lbPropsMap = new HashMap<>();
-
-//   public static LoadBalanceProperties getLBProperties(String url, Properties properties) {
-//     LBPropertiesKey key = new LBPropertiesKey(url, properties);
-//     LoadBalanceProperties lbProps = lbPropsMap.get(key);
-//     if (lbProps == null) {
-//       synchronized (lbPropsMap) {
-//         lbProps = lbPropsMap.get(key);
-//         if (lbProps == null) {
-//           lbProps = new LoadBalanceProperties(url, properties);
-//           lbPropsMap.put(key, lbProps);
-//         }
-//       }
-//     }
-//     return lbProps;
-//   }
 
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
@@ -228,26 +210,4 @@ public class LoadBalanceProperties {
     }
     return ld;
   }
-
-//   static class LBPropertiesKey {
-//     String url;
-//     Properties properties;
-//
-//     public LBPropertiesKey(String url, Properties properties) {
-//       this.url = url;
-//       this.properties = properties;
-//     }
-//     @Override
-//     public boolean equals(Object other) {
-//       if (other == null) return false;
-//       if (!(other instanceof LBPropertiesKey)) return false;
-//       LBPropertiesKey o = (LBPropertiesKey) other;
-//       return this.properties.equals(o.properties) && this.url.equals(o.url);
-//     }
-//
-//     @Override
-//     public int hashCode() {
-//       return Arrays.hashCode(new Object[]{url.hashCode(), properties.hashCode()});
-//     }
-//   }
 }
