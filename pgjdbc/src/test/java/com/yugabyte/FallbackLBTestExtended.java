@@ -50,8 +50,9 @@ public class FallbackLBTestExtended {
         ".7:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=10&topology-keys=";
 
     try {
+      Connection[] connections1 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
-          ".*:3,aws.eu-north.*:4", expectedInput(6, 6, 6, 0, 0, 0, 0, 0, 0));
+          ".*:3,aws.eu-north.*:4", connections1, expectedInput(6, 6, 6, 0, 0, 0, 0, 0, 0));
 
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
@@ -60,12 +61,14 @@ public class FallbackLBTestExtended {
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 7", "Stop node 7", 10);
       executeCmd(path + "/bin/yb-ctl stop_node 8", "Stop node 8", 10);
+      Connection[] connections2 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
-          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 9, -1, -1, 9));
+          ".*:3,aws.eu-north.*:4", connections2, expectedInput(-1, -1, -1, -1, -1, 9, -1, -1, 9));
 
       executeCmd(path + "/bin/yb-ctl stop_node 9", "Stop node 9", 10);
+      Connection[] connections3 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
-          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 27, -1, -1, -1));
+          ".*:3,aws.eu-north.*:4", connections3, expectedInput(-1, -1, -1, -1, -1, 27, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl start_node 2 --placement_info \"aws.us-west.us-west-1a\"",
           "Start node 2", 10);
@@ -73,12 +76,14 @@ public class FallbackLBTestExtended {
         Thread.sleep(15000);
       } catch (InterruptedException ie) {
       }
+      Connection[] connections4 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
-          ".*:3,aws.eu-north.*:4", expectedInput(-1, 18, -1, -1, -1, 27, -1, -1, -1));
+          ".*:3,aws.eu-north.*:4", connections4, expectedInput(-1, 18, -1, -1, -1, 27, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
+      Connection[] connections5 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
-          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 45, -1, -1, -1));
+          ".*:3,aws.eu-north.*:4", connections5, expectedInput(-1, -1, -1, -1, -1, 45, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl start_node 5 --placement_info \"aws.us-east.us-east-2a\"",
           "Start node 5", 10);
@@ -86,12 +91,14 @@ public class FallbackLBTestExtended {
         Thread.sleep(15000);
       } catch (InterruptedException ie) {
       }
+      Connection[] connections6 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
-          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, 18, 45, -1, -1, -1));
+          ".*:3,aws.eu-north.*:4", connections6, expectedInput(-1, -1, -1, -1, 18, 45, -1, -1, -1));
 
       executeCmd(path + "/bin/yb-ctl stop_node 5", "Stop node 5", 10);
+      Connection[] connections7 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west" +
-          ".*:3,aws.eu-north.*:4", expectedInput(-1, -1, -1, -1, -1, 63, -1, -1, -1));
+          ".*:3,aws.eu-north.*:4", connections7, expectedInput(-1, -1, -1, -1, -1, 63, -1, -1, -1));
 
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
@@ -108,10 +115,12 @@ public class FallbackLBTestExtended {
     String url = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?load-balance=true&topology-keys=";
 
     try {
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", expectedInput(6, 6, 6));
+      Connection[] connections1 = new Connection[numConnections];
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", connections1, expectedInput(6, 6, 6));
 
       executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", expectedInput(-1, 15, 15));
+      Connection[] connections2 = new Connection[numConnections];
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", connections2, expectedInput(-1, 15, 15));
 
       executeCmd(path + "/bin/yb-ctl start_node 1 --placement_info \"aws.us-west.us-west-1a\"",
           "Start node 1", 10);
@@ -120,7 +129,8 @@ public class FallbackLBTestExtended {
         Thread.sleep(5000);
       } catch (InterruptedException ie) {
       }
-      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", expectedInput(16, 16, 16));
+      Connection[] connections3 = new Connection[numConnections];
+      createConnectionsWithoutCloseAndVerify(url, "aws.us-west.*:1", connections3, expectedInput(16, 16, 16));
 
     } finally {
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
@@ -169,8 +179,7 @@ public class FallbackLBTestExtended {
   }
 
   private static void createConnectionsWithoutCloseAndVerify(String url, String tkValue,
-      ArrayList<Integer> counts) throws SQLException {
-    Connection[] connections = new Connection[numConnections];
+      Connection[] connections, ArrayList<Integer> counts) throws SQLException {
     for (int i = 0; i < numConnections; i++) {
       try {
         connections[i] = DriverManager.getConnection(url + tkValue, "yugabyte", "yugabyte");

@@ -25,11 +25,13 @@ public class LoadBalanceManager {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger(LoadBalanceManager.class.getName());
   private static long lastRefreshTime;
-  private static boolean forceRefresh = false;
+  private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
+  private static ConcurrentHashMap<LoadBalancer, ArrayList<String>> policyToHostsMap = new ConcurrentHashMap<>();
+
 
   public static boolean needsRefresh(long refreshInterval) {
-    if (forceRefresh) {
+    if (forceRefreshOnce) {
       LOGGER.info("forceRefresh is set to true");
       return true;
     }
@@ -44,26 +46,45 @@ public class LoadBalanceManager {
   }
 
   /**
-   * ----> FOR TEST PURPOSE ONLY  <------
+   * FOR TEST PURPOSE ONLY
    */
-  public static synchronized void clearManager() {
-    forceRefresh = false;
+  public static synchronized void clear() {
+    forceRefreshOnce = false;
     clusterInfoMap.clear();
     lastRefreshTime = 0;
     useHostColumn = null;
+  }
+
+  /**
+   * FOR TEST PURPOSE ONLY
+   */
+  public static void setForceRefreshOnce() {
+    forceRefreshOnce = true;
+  }
+
+  /**
+   * FOR TEST PURPOSE ONLY
+   */
+  public static void printHostToConnectionMap() {
+    System.out.println("Current load on servers");
+    System.out.println("-------------------");
+    for (Map.Entry<String, NodeInfo> e : clusterInfoMap.entrySet()) {
+      System.out.println(e.getKey() + " - " + e.getValue().connectionCount);
+    }
   }
 
   public static synchronized boolean refresh(Connection conn, long refreshInterval) throws SQLException {
     if (!needsRefresh(refreshInterval)) {
       return true;
     }
-    forceRefresh = false;
+    forceRefreshOnce = false;
+    policyToHostsMap.clear();
     Statement st = conn.createStatement();
     LOGGER.info("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
-    InetAddress hostConnectedInetAddr = getConnectedInetAddr(conn);
+    InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
 
-    // todo clear clusterInfoMap first or populate a temp map and then replace it?
+    boolean publicIPsGivenForAll = true;
     while (rs.next()) {
       String host = rs.getString("host");
       LOGGER.info("Received entry for host " + host);
@@ -77,7 +98,8 @@ public class LoadBalanceManager {
       synchronized (nodeInfo) {
         nodeInfo.host = host;
         nodeInfo.publicIP = publicHost;
-        nodeInfo.placement = new TopologyAwareLoadBalancer.CloudPlacement(cloud, region, zone);
+        publicIPsGivenForAll = !publicHost.isEmpty();
+        nodeInfo.placement = new CloudPlacement(cloud, region, zone);
         try {
           nodeInfo.port = Integer.valueOf(port);
         } catch (NumberFormatException nfe) {
@@ -112,14 +134,14 @@ public class LoadBalanceManager {
         publicHostInetAddr = null;
       }
       if (useHostColumn == null) {
-        if (hostConnectedInetAddr.equals(hostInetAddr)) {
+        if (hostConnectedInetAddress.equals(hostInetAddr)) {
           useHostColumn = Boolean.TRUE;
-        } else if (hostConnectedInetAddr.equals(publicHostInetAddr)) {
+        } else if (hostConnectedInetAddress.equals(publicHostInetAddr)) {
           useHostColumn = Boolean.FALSE;
         }
       }
     }
-    if (useHostColumn != null && !useHostColumn) {
+    if ((useHostColumn != null && !useHostColumn) || (useHostColumn == null && publicIPsGivenForAll)) {
       LOGGER.info("Will be using publicIPs for establishing connections");
       Enumeration<String> hosts = clusterInfoMap.keys();
       while (hosts.hasMoreElements()) {
@@ -128,7 +150,8 @@ public class LoadBalanceManager {
         clusterInfoMap.remove(info.host);
       }
     } else if (useHostColumn == null) {
-      LOGGER.warning("Unable to identify set of addresses to use for establishing connections");
+      LOGGER.warning("Unable to identify set of addresses to use for establishing connections. " +
+          "Using private addresses.");
     }
     lastRefreshTime = System.currentTimeMillis();
     return true;
@@ -146,10 +169,17 @@ public class LoadBalanceManager {
   }
 
   public static int getLoad(String host) {
-    return clusterInfoMap.get(host).connectionCount;
+    NodeInfo info = clusterInfoMap.get(host);
+    return info == null ? 0 : info.connectionCount;
   }
 
   public static ArrayList<String> getAllEligibleHosts(LoadBalancer policy) {
+//     synchronized (LoadBalanceManager.class) {
+//       ArrayList<String> list = policyToHostsMap.get(policy);
+//       if (list != null && !list.isEmpty()) {
+//         return list;
+//       }
+//     }
     ArrayList<String> list = new ArrayList<>();
     Set<Map.Entry<String, NodeInfo>> set = clusterInfoMap.entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
@@ -158,6 +188,9 @@ public class LoadBalanceManager {
       } else {
         LOGGER.info("Skipping " + e + " because it is not eligible.");
       }
+    }
+    synchronized (LoadBalanceManager.class) {
+      policyToHostsMap.put(policy, list);
     }
     return list;
   }
@@ -199,6 +232,7 @@ public class LoadBalanceManager {
     if (info != null) {
       synchronized (info) {
         info.connectionCount -= 1;
+        LOGGER.info("Decremented connection count for " + host + " by one: " + info.connectionCount);
         if (info.connectionCount < 0) {
           info.connectionCount = 0;
           LOGGER.fine("Resetting connection count for " + host + " to zero.");
@@ -230,64 +264,15 @@ public class LoadBalanceManager {
     LoadBalancer lb = loadBalanceProperties.getAppropriateLoadBalancer();
     Properties props = loadBalanceProperties.getOriginalProperties();
     String url = loadBalanceProperties.getStrippedURL();
-    Connection controlConnection = null;
-    boolean connectionCreated = false;
-    boolean gotException = false;
 
-    if (LoadBalanceManager.needsRefresh(lb.getRefreshListSeconds())) {
-      HostSpec[] hspec = hostSpecs(loadBalanceProperties.getOriginalProperties());
-      ArrayList<String> hosts = LoadBalanceManager.getAllAvailableHosts(new ArrayList<>());
-      while (true) {
-        try {
-          controlConnection = new PgConnection(hspec, user, dbName, props, url);
-          // ((PgConnection)controlConnection).getQueryExecutor().getHostSpec().getHost();
-          connectionCreated = true;
-          LoadBalanceManager.refresh(controlConnection, lb.getRefreshListSeconds());
-          controlConnection.close();
-          break;
-        } catch (SQLException ex) {
-          if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
-            return null;
-          }
-          gotException = true;
-          if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
-            if (hspec.length == 1) {
-              LoadBalanceManager.markAsFailed(hspec[0].getHost());
-            }
-          }
-          // todo differentiate between connection creation failure and refresh failure (what can cause refresh failure other than network error?)
-          // todo mark hspec's host as failed
-          // Retry until servers are available
-          for (HostSpec h : hspec) {
-            hosts.remove(h.getHost());
-          }
-          if (hosts.isEmpty()) {
-            return null;
-          } else {
-            // Try the first host in the list (don't have to check least loaded one since it's
-            // just for the control connection)
-            HostSpec hs = new HostSpec(hosts.get(0), LoadBalanceManager.getPort(hosts.get(0)),
-                loadBalanceProperties.getOriginalProperties().getProperty("localSocketAddress"));
-            hspec = new HostSpec[]{hs};
-          }
-        } finally {
-          if (gotException && connectionCreated) {
-            try {
-              controlConnection.close();
-            } catch (SQLException throwables) {
-              // ignore it was to be closed
-            }
-          }
-        }
-      }
+    if (!checkAndRefresh(loadBalanceProperties, lb, user, dbName)) {
+      return null;
     }
 
     List<String> failedHosts = new ArrayList<>();
     String chosenHost = lb.getLeastLoadedServer(true, failedHosts);
     PgConnection newConnection;
     SQLException firstException = null;
-    // refresh can also fail on a particular server so try in loop till
-    // options are exhausted
     while (chosenHost != null) {
       try {
         props.setProperty("PGHOST", chosenHost);
@@ -297,15 +282,15 @@ public class LoadBalanceManager {
         LOGGER.info("Created connection to " + chosenHost);
         return newConnection;
       } catch (SQLException ex) {
+        LOGGER.info("Received SQLE: " + ex);
         // Let the refresh be forced the next time it is tried.
-        forceRefresh = true; //  lb.setForRefresh(); // todo why? not needed in new code?
+        forceRefreshOnce = true;
         failedHosts.add(chosenHost);
         LoadBalanceManager.decrementConnectionCount(chosenHost);
         if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
           if (firstException == null) {
             firstException = ex;
           }
-          // TODO log exception go to the next one after adding to failed list
           LOGGER.fine("couldn't connect to " + chosenHost + ", adding it to failed host list");
           LoadBalanceManager.markAsFailed(chosenHost);
         } else {
@@ -314,7 +299,6 @@ public class LoadBalanceManager {
           // only in this attempt, instead of adding it in the failed host list of the
           // load balancer itself because it won't be tried till the next refresh happens.
           LOGGER.warning("got exception " + ex.getMessage() + " while connecting to " + chosenHost);
-          // how will it not be tried in the next iteration? -> Added in failedHosts above
         }
       } catch (Throwable e) {
         LoadBalanceManager.decrementConnectionCount(chosenHost);
@@ -325,7 +309,66 @@ public class LoadBalanceManager {
     return null;
   }
 
-  public static InetAddress getConnectedInetAddr(Connection conn) throws SQLException {
+  private static boolean checkAndRefresh(LoadBalanceProperties loadBalanceProperties,
+      LoadBalancer lb, String user, String dbName) {
+    Properties props = loadBalanceProperties.getOriginalProperties();
+    String url = loadBalanceProperties.getStrippedURL();
+    Connection controlConnection = null;
+    boolean connectionCreated = false;
+    boolean gotException = false;
+
+    if (LoadBalanceManager.needsRefresh(lb.getRefreshListSeconds())) {
+      HostSpec[] hspec = hostSpecs(loadBalanceProperties.getOriginalProperties());
+      ArrayList<String> hosts = LoadBalanceManager.getAllAvailableHosts(new ArrayList<>());
+      while (true) {
+        try {
+          controlConnection = new PgConnection(hspec, user, dbName, props, url);
+          connectionCreated = true;
+          LoadBalanceManager.refresh(controlConnection, lb.getRefreshListSeconds());
+          controlConnection.close();
+          break;
+        } catch (SQLException ex) {
+          gotException = true;
+          if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
+            LOGGER.warning("Received error UNDEFINED_FUNCTION (42883)");
+            return false;
+          }
+          if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
+            for (HostSpec h : hspec) {
+              LoadBalanceManager.markAsFailed(h.getHost());
+            }
+          }
+          // Retry until servers are available
+          for (HostSpec h : hspec) {
+            hosts.remove(h.getHost());
+          }
+          if (hosts.isEmpty()) {
+            LOGGER.fine("Failed to establish control connection");
+            return false;
+          } else {
+            // Try the first host in the list (don't have to check least loaded one since it's
+            // just for the control connection)
+            HostSpec hs = new HostSpec(hosts.get(0), LoadBalanceManager.getPort(hosts.get(0)),
+                loadBalanceProperties.getOriginalProperties().getProperty("localSocketAddress"));
+            hspec = new HostSpec[]{hs};
+          }
+        } catch (Exception e) {
+          gotException = true;
+          throw e;
+        } finally {
+          if (gotException && connectionCreated) {
+            try {
+              controlConnection.close();
+            } catch (SQLException e) {
+            }
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  public static InetAddress getConnectedInetAddress(Connection conn) throws SQLException {
     String hostConnectedTo = ((PgConnection) conn).getQueryExecutor().getHostSpec().getHost();
     InetAddress hostConnectedInetAddr;
 
@@ -348,7 +391,7 @@ public class LoadBalanceManager {
 
     private String host;
     private int port;
-    private TopologyAwareLoadBalancer.CloudPlacement placement;
+    private CloudPlacement placement;
     private String publicIP;
     private int connectionCount;
     private boolean isDown;
@@ -366,7 +409,7 @@ public class LoadBalanceManager {
       return publicIP;
     }
 
-    public TopologyAwareLoadBalancer.CloudPlacement getPlacement() {
+    public CloudPlacement getPlacement() {
       return placement;
     }
 
@@ -383,4 +426,55 @@ public class LoadBalanceManager {
     }
   }
 
+  static class CloudPlacement {
+    private final String cloud;
+    private final String region;
+    private final String zone;
+
+    CloudPlacement(String cloud, String region, String zone) {
+      this.cloud = cloud;
+      this.region = region;
+      this.zone = zone;
+    }
+
+    public boolean isContainedIn(Set<CloudPlacement> set) {
+      if (this.zone.equals("*")) {
+        for (CloudPlacement cp : set) {
+          if (cp.cloud.equalsIgnoreCase(this.cloud) && cp.region.equalsIgnoreCase(this.region)) {
+            return true;
+          }
+        }
+      } else {
+        for (CloudPlacement cp : set) {
+          if (cp.cloud.equalsIgnoreCase(this.cloud)
+              && cp.region.equalsIgnoreCase(this.region)
+              && (cp.zone.equalsIgnoreCase(this.zone) || cp.zone.equals("*"))) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    public int hashCode() {
+      return cloud.hashCode() ^ region.hashCode() ^ zone.hashCode();
+    }
+
+    public boolean equals(Object other) {
+      boolean equal = false;
+      LOGGER.fine("equals called for this: " + this + " and other = " + other);
+      if (other instanceof CloudPlacement) {
+        CloudPlacement o = (CloudPlacement) other;
+        equal = this.cloud.equalsIgnoreCase(o.cloud) &&
+            this.region.equalsIgnoreCase(o.region) &&
+            this.zone.equalsIgnoreCase(o.zone);
+      }
+      LOGGER.fine("equals returning: " + equal);
+      return equal;
+    }
+
+    public String toString() {
+      return "CloudPlacement: " + cloud + "." + region + "." + zone;
+    }
+  }
 }
