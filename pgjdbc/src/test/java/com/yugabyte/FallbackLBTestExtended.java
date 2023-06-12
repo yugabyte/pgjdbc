@@ -124,7 +124,7 @@ public class FallbackLBTestExtended {
 
       executeCmd(path + "/bin/yb-ctl start_node 1 --placement_info \"aws.us-west.us-west-1a\"",
           "Start node 1", 10);
-      ClusterAwareLoadBalancer.forceRefresh = true;
+      LoadBalanceManager.setForceRefreshOnce();
       try {
         Thread.sleep(5000);
       } catch (InterruptedException ie) {

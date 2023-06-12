@@ -30,6 +30,12 @@ public class LoadBalanceProperties {
    * placements are unavailable.
    */
   public static final String EXPLICIT_FALLBACK_ONLY_KEY = "explicit-fallback-only";
+  /**
+   * The default value should ideally match the interval at which the server-list is updated at
+   * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
+   * not too low (1s).
+   */
+  public static final int DEFAULT_FAILED_HOST_TTL_SECONDS = 5;
   private static final String PROPERTY_SEP = "&";
   private static final String EQUALS = "=";
   public static final String LOCATIONS_DELIMITER = ",";
@@ -180,7 +186,7 @@ public class LoadBalanceProperties {
           "This method is expected to be called only when load-balance is true");
     }
     // todo Find a better way to pass/update these properties. Currently, lb instance is
-    //  singleton, so cannot include these in it.
+    //  singleton for a given placement, so cannot include these in it.
     System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
     System.setProperty(EXPLICIT_FALLBACK_ONLY_KEY, String.valueOf(explicitFallbackOnly));
     LoadBalancer ld = null;

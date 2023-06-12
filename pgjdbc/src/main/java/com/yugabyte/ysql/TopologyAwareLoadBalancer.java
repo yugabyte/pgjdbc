@@ -17,15 +17,24 @@ import static com.yugabyte.ysql.LoadBalanceProperties.*;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class TopologyAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER = Logger.getLogger(TopologyAwareLoadBalancer.class.getName());
+  /**
+   * Holds the value of topology-keys specified.
+   */
   private final String placements;
+  /**
+   * Derived from the placements value above.
+   */
   private final Map<Integer, Set<LoadBalanceManager.CloudPlacement>> allowedPlacements = new HashMap<>();
-  private final int PRIMARY_PLACEMENTS = 1;
-  private final int REST_OF_CLUSTER = -1;
+  private final int PRIMARY_PLACEMENTS_INDEX = 1;
+  private final int REST_OF_CLUSTER_INDEX = -1;
+  /**
+   * The index of placement level currently being used for new connection request. It is always
+   * reset to zero for a new connection request.
+   */
   private int currentPlacementIndex = 1;
   List<String> attempted = new ArrayList<>();
   private int refreshIntervalSeconds;
@@ -47,14 +56,14 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     if (placementParts.length != 3 || placementParts[0].equals("*") || placementParts[1].equals(
         "*")) {
       // Return an error so the user takes corrective action.
-      LOGGER.log(Level.WARNING,
+      LOGGER.warning(
           "Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property value: " + placement);
       throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property " +
           "value: " + placement);
     }
     LoadBalanceManager.CloudPlacement cp = new LoadBalanceManager.CloudPlacement(
         placementParts[0], placementParts[1], placementParts[2]);
-    LOGGER.fine(getLoadBalancerType() + ": Adding placement " + cp + " to allowed " + "list");
+    LOGGER.fine("Adding placement " + cp + " to allowed " + "list");
     allowedPlacements.add(cp);
   }
 
@@ -66,7 +75,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         throw new IllegalArgumentException("Invalid value part for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
       }
       if (v.length == 1) {
-        Set<LoadBalanceManager.CloudPlacement> primary = allowedPlacements.computeIfAbsent(PRIMARY_PLACEMENTS, k -> new HashSet<>());
+        Set<LoadBalanceManager.CloudPlacement> primary =
+            allowedPlacements.computeIfAbsent(PRIMARY_PLACEMENTS_INDEX, k -> new HashSet<>());
         populatePlacementSet(v[0], primary);
       } else {
         int pref = Integer.valueOf(v[1]);
@@ -89,23 +99,23 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   public boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e) {
     Set<LoadBalanceManager.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
     boolean onlyExplicitFallback = Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY);
-    boolean found = (currentPlacementIndex == REST_OF_CLUSTER && !onlyExplicitFallback)
+    boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX && !onlyExplicitFallback)
         || (set != null && e.getValue().getPlacement().isContainedIn(set));
     boolean isAttempted = attempted.contains(e.getKey());
     boolean isDown = e.getValue().isDown();
-    LOGGER.info(e.getKey() + " has required placement? " + found + ", isDown? " + isDown + ", attempted? " + isAttempted);
+    LOGGER.fine(e.getKey() + " has required placement? " + found + ", isDown? " + isDown + ", " +
+        "attempted? " + isAttempted);
     return found
         && !isAttempted
         && !isDown;
   }
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts) {
-    LOGGER.info("failedHosts: " + failedHosts);
+    LOGGER.fine("failedHosts: " + failedHosts);
     if (newRequest) {
-      LOGGER.info("new request ");
-      currentPlacementIndex = PRIMARY_PLACEMENTS;
+      currentPlacementIndex = PRIMARY_PLACEMENTS_INDEX;
     } else {
-      LOGGER.info("Placements: [" + placements
+      LOGGER.fine("Placements: [" + placements
           + "]. Attempting to connect to servers in fallback level-"
           + (currentPlacementIndex-1) + " ...");
     }
@@ -119,11 +129,11 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
       for (String h : hosts) {
         if (failedHosts.contains(h)) {
-          LOGGER.info("Skipping failed host " + h);
+          LOGGER.fine("Skipping failed host " + h);
           continue;
         }
         int currLoad = LoadBalanceManager.getLoad(h);
-        LOGGER.info("Number of connections to " + h + ": " + currLoad);
+        LOGGER.fine("Number of connections to " + h + ": " + currLoad);
         if (currLoad < min) {
           min = currLoad;
           minConnectionsHostList.clear();
@@ -138,22 +148,16 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         chosenHost = minConnectionsHostList.get(idx);
       }
       if (chosenHost != null) {
-        LOGGER.fine("Host chosen for new connection: " + chosenHost);
         LoadBalanceManager.incrementConnectionCount(chosenHost);
-//     } else if (useHostColumn == null) {
-        // Current host inet addr did not match with either host inet or public_ip inet addr AND
-        // Now we have exhausted the servers list which was populated with (private) host values.
-        // So try connecting to the public_ips.
-//       return null;
       } else {
-        LOGGER.info("chosenHost is null for placement level " + currentPlacementIndex);
-        LOGGER.info("allowedPlacements " + allowedPlacements);
+        LOGGER.fine("chosenHost is null for placement level " + currentPlacementIndex + ", " +
+            "allowedPlacements: " + allowedPlacements);
         currentPlacementIndex += 1;
         while (allowedPlacements.get(currentPlacementIndex) == null && currentPlacementIndex > 0) {
           currentPlacementIndex += 1;
           if (currentPlacementIndex > MAX_PREFERENCE_VALUE) {
             // All explicit fallbacks are done with no luck. Now try rest-of-cluster
-            currentPlacementIndex = REST_OF_CLUSTER;
+            currentPlacementIndex = REST_OF_CLUSTER_INDEX;
           } else if (currentPlacementIndex == 0) {
             // Even rest-of-cluster did not help. Quit
             break;
@@ -162,15 +166,11 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         if (currentPlacementIndex == 0) {
           break;
         }
-        LOGGER.info("Will be trying placement level " + currentPlacementIndex + " next.");
+        LOGGER.fine("Next, attempting to connect to hosts from placement level " + currentPlacementIndex);
       }
     }
-    LOGGER.info("Host chosen for new connection: " + chosenHost);
+    LOGGER.fine("Host chosen for new connection: " + chosenHost);
     return chosenHost;
-  }
-
-  public String getLoadBalancerType() {
-    return "TopologyAwareLoadBalancer";
   }
 
 }
