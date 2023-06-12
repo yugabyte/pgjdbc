@@ -19,12 +19,6 @@ import java.util.logging.Logger;
 
 public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER = Logger.getLogger(ClusterAwareLoadBalancer.class.getName());
-  /**
-   * The default value should ideally match the interval at which the server-list is updated at
-   * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
-   * not too low (1s).
-   */
-  static final int DEFAULT_FAILED_HOST_TTL_SECONDS = 5;
 
   private static volatile ClusterAwareLoadBalancer instance;
   List<String> attempted = new ArrayList<>();
@@ -75,7 +69,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
         continue;
       }
       int currLoad = LoadBalanceManager.getLoad(h);
-      LOGGER.info("Number of connections to " + h + ": " + currLoad);
+      LOGGER.fine("Number of connections to " + h + ": " + currLoad);
       if (currLoad < min) {
         min = currLoad;
         minConnectionsHostList.clear();
@@ -92,24 +86,9 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     }
     if (chosenHost != null) {
       LoadBalanceManager.incrementConnectionCount(chosenHost);
-//     } else if (useHostColumn == null) {
-      // Current host inet addr did not match with either host inet or public_ip inet addr AND
-      // Now we have exhausted the servers list which was populated with (private) host values.
-      // So try connecting to the public_ips.
-//       return null;
     }
-    LOGGER.info("Host chosen for new connection: " + chosenHost);
+    LOGGER.fine("Host chosen for new connection: " + chosenHost);
     return chosenHost;
-  }
-
-  public static boolean forceRefresh = false;
-
-  public String getLoadBalancerType() {
-    return "ClusterAwareLoadBalancer";
-  }
-
-  protected String loadBalancingNodes() {
-    return "all";
   }
 
 }

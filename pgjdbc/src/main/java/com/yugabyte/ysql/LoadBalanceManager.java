@@ -16,7 +16,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-import static com.yugabyte.ysql.ClusterAwareLoadBalancer.DEFAULT_FAILED_HOST_TTL_SECONDS;
+import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_FAILED_HOST_TTL_SECONDS;
 import static org.postgresql.Driver.hostSpecs;
 
 public class LoadBalanceManager {
@@ -27,23 +27,6 @@ public class LoadBalanceManager {
   private static long lastRefreshTime;
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
-  private static ConcurrentHashMap<LoadBalancer, ArrayList<String>> policyToHostsMap = new ConcurrentHashMap<>();
-
-
-  public static boolean needsRefresh(long refreshInterval) {
-    if (forceRefreshOnce) {
-      LOGGER.info("forceRefresh is set to true");
-      return true;
-    }
-    long elapsed = (System.currentTimeMillis() - lastRefreshTime) / 1000;
-    if (elapsed > refreshInterval) {
-      LOGGER.fine("Needs refresh as list of servers may be stale or being fetched for " +
-          "the first time");
-      return true;
-    }
-    LOGGER.fine("Refresh not required.");
-    return false;
-  }
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -73,21 +56,35 @@ public class LoadBalanceManager {
     }
   }
 
+  public static boolean needsRefresh(long refreshInterval) {
+    if (forceRefreshOnce) {
+      LOGGER.finest("forceRefreshOnce is set to true");
+      return true;
+    }
+    long elapsed = (System.currentTimeMillis() - lastRefreshTime) / 1000;
+    if (elapsed > refreshInterval) {
+      LOGGER.fine("Needs refresh as list of servers may be stale or being fetched for " +
+          "the first time");
+      return true;
+    }
+    LOGGER.fine("Refresh not required");
+    return false;
+  }
+
   public static synchronized boolean refresh(Connection conn, long refreshInterval) throws SQLException {
     if (!needsRefresh(refreshInterval)) {
       return true;
     }
     forceRefreshOnce = false;
-    policyToHostsMap.clear();
     Statement st = conn.createStatement();
-    LOGGER.info("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
+    LOGGER.fine("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
 
     boolean publicIPsGivenForAll = true;
     while (rs.next()) {
       String host = rs.getString("host");
-      LOGGER.info("Received entry for host " + host);
+      LOGGER.finest("Received entry for host " + host);
       String publicHost = rs.getString("public_ip");
       publicHost = publicHost == null ? "" : publicHost;
       String port = rs.getString("port");
@@ -109,10 +106,10 @@ public class LoadBalanceManager {
         long failedHostTTL = Long.getLong("failed-host-ttl-seconds", DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.info("Marking " + nodeInfo.host + " as UP since failed-host-ttl has elapsed");
+            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-ttl has elapsed");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.info("Keeping " + nodeInfo.host + " marked as DOWN since failed-host-ttl not elapsed");
+            LOGGER.fine("Keeping " + nodeInfo.host + " marked as DOWN since failed-host-ttl not elapsed");
           }
         }
       }
@@ -174,23 +171,14 @@ public class LoadBalanceManager {
   }
 
   public static ArrayList<String> getAllEligibleHosts(LoadBalancer policy) {
-//     synchronized (LoadBalanceManager.class) {
-//       ArrayList<String> list = policyToHostsMap.get(policy);
-//       if (list != null && !list.isEmpty()) {
-//         return list;
-//       }
-//     }
     ArrayList<String> list = new ArrayList<>();
     Set<Map.Entry<String, NodeInfo>> set = clusterInfoMap.entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
       if (policy.isHostEligible(e)) {
         list.add(e.getKey());
       } else {
-        LOGGER.info("Skipping " + e + " because it is not eligible.");
+        LOGGER.finest("Skipping " + e + " because it is not eligible.");
       }
-    }
-    synchronized (LoadBalanceManager.class) {
-      policyToHostsMap.put(policy, list);
     }
     return list;
   }
@@ -232,7 +220,7 @@ public class LoadBalanceManager {
     if (info != null) {
       synchronized (info) {
         info.connectionCount -= 1;
-        LOGGER.info("Decremented connection count for " + host + " by one: " + info.connectionCount);
+        LOGGER.fine("Decremented connection count for " + host + " by one: " + info.connectionCount);
         if (info.connectionCount < 0) {
           info.connectionCount = 0;
           LOGGER.fine("Resetting connection count for " + host + " to zero.");
@@ -253,8 +241,6 @@ public class LoadBalanceManager {
         return conn;
       }
       LOGGER.warning("Failed to apply load balance. Trying normal connection");
-    } else {
-      LOGGER.info("load balance is false");
     }
     return null;
   }
@@ -279,10 +265,9 @@ public class LoadBalanceManager {
         props.setProperty("PGPORT", String.valueOf(LoadBalanceManager.getPort(chosenHost)));
         newConnection = new PgConnection(hostSpecs(props), user, dbName, props, url);
         newConnection.setLoadBalancer(lb);
-        LOGGER.info("Created connection to " + chosenHost);
+        LOGGER.fine("Created connection to " + chosenHost);
         return newConnection;
       } catch (SQLException ex) {
-        LOGGER.info("Received SQLE: " + ex);
         // Let the refresh be forced the next time it is tried.
         forceRefreshOnce = true;
         failedHosts.add(chosenHost);
@@ -301,6 +286,7 @@ public class LoadBalanceManager {
           LOGGER.warning("got exception " + ex.getMessage() + " while connecting to " + chosenHost);
         }
       } catch (Throwable e) {
+        LOGGER.fine("Received Throwable: " + e);
         LoadBalanceManager.decrementConnectionCount(chosenHost);
         throw e;
       }
