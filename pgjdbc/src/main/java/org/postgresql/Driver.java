@@ -23,8 +23,6 @@ package org.postgresql;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
-import com.yugabyte.ysql.LoadBalanceManager;
-
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.DriverInfo;
 import org.postgresql.util.ExpressionProperties;
@@ -39,6 +37,7 @@ import org.postgresql.util.PSQLState;
 import org.postgresql.util.SharedTimer;
 import org.postgresql.util.URLCoder;
 
+import com.yugabyte.ysql.LoadBalanceManager;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.IOException;
