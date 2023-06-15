@@ -44,10 +44,10 @@ public class UniformLoadBalanceExample {
 
     if (debugLogging) {
       controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&loggerLevel=debug";
+        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&loggerLevel=debug&yb-servers-refresh-interval=0";
     } else {
       controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true";
+        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&yb-servers-refresh-interval=0";
     }
 
     System.out.println("Setting up the connection pool having 6 connections.......");

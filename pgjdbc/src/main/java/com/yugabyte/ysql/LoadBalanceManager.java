@@ -1,5 +1,8 @@
 package com.yugabyte.ysql;
 
+import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_FAILED_HOST_TTL_SECONDS;
+import static org.postgresql.Driver.hostSpecs;
+
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.GT;
 import org.postgresql.util.HostSpec;
@@ -15,9 +18,6 @@ import java.sql.Statement;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
-
-import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_FAILED_HOST_TTL_SECONDS;
-import static org.postgresql.Driver.hostSpecs;
 
 public class LoadBalanceManager {
 
@@ -268,7 +268,7 @@ public class LoadBalanceManager {
         LOGGER.fine("Created connection to " + chosenHost);
         return newConnection;
       } catch (SQLException ex) {
-        // Let the refresh be forced the next time it is tried.
+        // Let the refresh be forced the next time it is tried. todo Is this needed?
         forceRefreshOnce = true;
         failedHosts.add(chosenHost);
         LoadBalanceManager.decrementConnectionCount(chosenHost);
@@ -303,14 +303,14 @@ public class LoadBalanceManager {
     boolean connectionCreated = false;
     boolean gotException = false;
 
-    if (LoadBalanceManager.needsRefresh(lb.getRefreshListSeconds())) {
+    if (needsRefresh(lb.getRefreshListSeconds())) {
       HostSpec[] hspec = hostSpecs(loadBalanceProperties.getOriginalProperties());
-      ArrayList<String> hosts = LoadBalanceManager.getAllAvailableHosts(new ArrayList<>());
+      ArrayList<String> hosts = getAllAvailableHosts(new ArrayList<>());
       while (true) {
         try {
           controlConnection = new PgConnection(hspec, user, dbName, props, url);
           connectionCreated = true;
-          LoadBalanceManager.refresh(controlConnection, lb.getRefreshListSeconds());
+          refresh(controlConnection, lb.getRefreshListSeconds());
           controlConnection.close();
           break;
         } catch (SQLException ex) {
@@ -321,7 +321,7 @@ public class LoadBalanceManager {
           }
           if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
             for (HostSpec h : hspec) {
-              LoadBalanceManager.markAsFailed(h.getHost());
+              markAsFailed(h.getHost());
             }
           }
           // Retry until servers are available

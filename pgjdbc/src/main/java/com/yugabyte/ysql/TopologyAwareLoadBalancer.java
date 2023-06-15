@@ -113,6 +113,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts) {
     LOGGER.fine("failedHosts: " + failedHosts);
     if (newRequest) {
+      // todo should we retain its value for some time?
       currentPlacementIndex = PRIMARY_PLACEMENTS_INDEX;
     } else {
       LOGGER.fine("Placements: [" + placements

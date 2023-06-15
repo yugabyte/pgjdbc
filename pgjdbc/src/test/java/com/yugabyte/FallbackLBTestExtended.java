@@ -1,11 +1,9 @@
 package com.yugabyte;
 
-import com.yugabyte.ysql.LoadBalanceManager;
-
 import org.postgresql.util.PSQLException;
 
+import com.yugabyte.ysql.LoadBalanceManager;
 import com.yugabyte.ysql.LoadBalanceProperties;
-import com.yugabyte.ysql.ClusterAwareLoadBalancer;
 
 import java.io.BufferedReader;
 import java.io.IOException;

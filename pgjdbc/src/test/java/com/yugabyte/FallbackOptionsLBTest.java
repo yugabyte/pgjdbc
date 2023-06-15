@@ -1,9 +1,10 @@
 package com.yugabyte;
 
-import com.yugabyte.ysql.LoadBalanceManager;
+import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
 
 import org.postgresql.util.PSQLException;
 
+import com.yugabyte.ysql.LoadBalanceManager;
 import com.yugabyte.ysql.LoadBalanceProperties;
 
 import java.io.BufferedReader;
@@ -13,8 +14,6 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
 
 public class FallbackOptionsLBTest {
   private static int numConnections = 12;
