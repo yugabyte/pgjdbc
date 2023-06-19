@@ -59,6 +59,8 @@ public class LoadBalanceProperties {
   private String placements = null;
   private int refreshInterval = -1;
   private boolean explicitFallbackOnly;
+  private boolean refreshIntervalSpecified;
+  private boolean explicitFallbackOnlySpecified;
 
   public LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
@@ -104,6 +106,8 @@ public class LoadBalanceProperties {
             refreshInterval = Integer.parseInt(lbParts[1]);
             if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
               refreshInterval = DEFAULT_REFRESH_INTERVAL;
+            } else {
+              refreshIntervalSpecified = true;
             }
           } catch (NumberFormatException nfe) {
             refreshInterval = DEFAULT_REFRESH_INTERVAL;
@@ -117,6 +121,7 @@ public class LoadBalanceProperties {
           if (propValue.equalsIgnoreCase("true")) {
             this.explicitFallbackOnly = true;
           }
+          explicitFallbackOnlySpecified = true;
         } else {
           if (sb.toString().contains("?")) {
             sb.append(PROPERTY_SEP);
@@ -145,6 +150,8 @@ public class LoadBalanceProperties {
           refreshInterval = Integer.parseInt(propValue);
           if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
             refreshInterval = DEFAULT_REFRESH_INTERVAL;
+          } else {
+            refreshIntervalSpecified = true;
           }
         } catch (NumberFormatException nfe) {
           refreshInterval = DEFAULT_REFRESH_INTERVAL;
@@ -155,6 +162,7 @@ public class LoadBalanceProperties {
         if (propValue.equalsIgnoreCase("true")) {
           explicitFallbackOnly = true;
         }
+        explicitFallbackOnlySpecified = true;
       }
     }
     return sb.toString();
@@ -187,8 +195,12 @@ public class LoadBalanceProperties {
     }
     // todo Find a better way to pass/update these properties. Currently, lb instance is
     //  singleton for a given placement, so cannot include these in it.
-    System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
-    System.setProperty(EXPLICIT_FALLBACK_ONLY_KEY, String.valueOf(explicitFallbackOnly));
+    if (refreshIntervalSpecified) {
+      System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
+    }
+    if (explicitFallbackOnlySpecified) {
+      System.setProperty(EXPLICIT_FALLBACK_ONLY_KEY, String.valueOf(explicitFallbackOnly));
+    }
     LoadBalancer ld = null;
     if (placements == null) {
       // return base class conn manager.

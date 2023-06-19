@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 public class FallbackOptionsLBTest {
   private static int numConnections = 12;
-  private static final String path = System.getenv("YBDB_PATH");
+  public static final String path = System.getenv("YBDB_PATH");
   private static String baseUrl = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true&"
       + LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY + "=";
 
@@ -210,13 +210,13 @@ public class FallbackOptionsLBTest {
   /**
    * Start RF=3 cluster with placements 127.0.0.1 -> 2a, 127.0.0.2 -> 2b and 127.0.0.3 -> 2c
    */
-  private static void startYBDBCluster() {
+  public static void startYBDBCluster() {
     executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     executeCmd(path + "/bin/yb-ctl start --rf 3 --placement_info \"aws.us-west.us-west-2a,aws" +
         ".us-west.us-west-2b,aws.us-west.us-west-2c\"", "Start YugabyteDB rf=3 cluster", 15);
   }
 
-  private static void executeCmd(String cmd, String msg, int timeout) {
+  public static void executeCmd(String cmd, String msg, int timeout) {
     try {
       ProcessBuilder builder = new ProcessBuilder();
       builder.command("sh", "-c", cmd);
@@ -267,7 +267,7 @@ public class FallbackOptionsLBTest {
     }
   }
 
-  private static void verifyOn(String server, int expectedCount, String tkValue) {
+  public static void verifyOn(String server, int expectedCount, String tkValue) {
     try {
       ProcessBuilder builder = new ProcessBuilder();
       builder.command("sh", "-c", "curl http://" + server + ":13000/rpcz");

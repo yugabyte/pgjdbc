@@ -25,6 +25,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
    * Holds the value of topology-keys specified.
    */
   private final String placements;
+
+  private long lastRequestTime;
   /**
    * Derived from the placements value above.
    */
@@ -111,9 +113,10 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   }
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts) {
-    LOGGER.fine("failedHosts: " + failedHosts);
-    if (newRequest) {
-      // todo should we retain its value for some time?
+    LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts);
+    // Reset currentPlacementIndex if it's a new request AND refresh() happened after the
+    // last request was processed
+    if (newRequest && (LoadBalanceManager.getLastRefreshTime() - lastRequestTime >= 0)) {
       currentPlacementIndex = PRIMARY_PLACEMENTS_INDEX;
     } else {
       LOGGER.fine("Placements: [" + placements
@@ -170,6 +173,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         LOGGER.fine("Next, attempting to connect to hosts from placement level " + currentPlacementIndex);
       }
     }
+    lastRequestTime = System.currentTimeMillis();
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
     return chosenHost;
   }

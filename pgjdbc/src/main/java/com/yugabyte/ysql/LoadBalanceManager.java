@@ -56,6 +56,10 @@ public class LoadBalanceManager {
     }
   }
 
+  public static long getLastRefreshTime() {
+    return lastRefreshTime;
+  }
+
   public static boolean needsRefresh(long refreshInterval) {
     if (forceRefreshOnce) {
       LOGGER.finest("forceRefreshOnce is set to true");
@@ -64,10 +68,10 @@ public class LoadBalanceManager {
     long elapsed = (System.currentTimeMillis() - lastRefreshTime) / 1000;
     if (elapsed > refreshInterval) {
       LOGGER.fine("Needs refresh as list of servers may be stale or being fetched for " +
-          "the first time");
+          "the first time, refreshInterval: " + refreshInterval);
       return true;
     }
-    LOGGER.fine("Refresh not required");
+    LOGGER.fine("Refresh not required, refreshInterval: " + refreshInterval);
     return false;
   }
 
