@@ -1359,8 +1359,8 @@ public abstract class BaseDataSource implements CommonDataSource, Referenceable 
     } else {
       url.append(serverName);
     }
-    if (portNumber != 0) {
-      url.append(":").append(portNumber);
+    if (getPortNumber() != 0) {
+      url.append(":").append(getPortNumber());
     }
     String moreEndPoints = getAdditionalEndPoints();
     if (moreEndPoints != null) {
