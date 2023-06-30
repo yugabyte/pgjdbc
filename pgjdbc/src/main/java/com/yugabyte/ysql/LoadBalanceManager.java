@@ -75,10 +75,7 @@ public class LoadBalanceManager {
     return false;
   }
 
-  public static synchronized boolean refresh(Connection conn, long refreshInterval) throws SQLException {
-    if (!needsRefresh(refreshInterval)) {
-      return true;
-    }
+  private static synchronized boolean refresh(Connection conn, long refreshInterval) throws SQLException {
     forceRefreshOnce = false;
     Statement st = conn.createStatement();
     LOGGER.fine("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
@@ -162,10 +159,11 @@ public class LoadBalanceManager {
     NodeInfo info = clusterInfoMap.get(host);
     if (info == null) return; // unexpected
     synchronized (info) {
+      String previous = info.isDown ? "DOWN" : "UP";
       info.isDown = true;
       info.isDownSince = System.currentTimeMillis();
       info.connectionCount = 0;
-      LOGGER.info("Marked " + host + " as DOWN");
+      LOGGER.info("Marked " + host + " as DOWN (was " + previous + " earlier)");
     }
   }
 
@@ -299,16 +297,16 @@ public class LoadBalanceManager {
     return null;
   }
 
-  private static boolean checkAndRefresh(LoadBalanceProperties loadBalanceProperties,
+  private static synchronized boolean checkAndRefresh(LoadBalanceProperties loadBalanceProperties,
       LoadBalancer lb, String user, String dbName) {
-    Properties props = loadBalanceProperties.getOriginalProperties();
-    String url = loadBalanceProperties.getStrippedURL();
-    Connection controlConnection = null;
-    boolean connectionCreated = false;
-    boolean gotException = false;
-
     if (needsRefresh(lb.getRefreshListSeconds())) {
-      HostSpec[] hspec = hostSpecs(loadBalanceProperties.getOriginalProperties());
+      Properties props = loadBalanceProperties.getOriginalProperties();
+      String url = loadBalanceProperties.getStrippedURL();
+      HostSpec[] hspec = hostSpecs(props);
+      Connection controlConnection = null;
+      boolean connectionCreated = false;
+      boolean gotException = false;
+
       ArrayList<String> hosts = getAllAvailableHosts(new ArrayList<>());
       while (true) {
         try {
