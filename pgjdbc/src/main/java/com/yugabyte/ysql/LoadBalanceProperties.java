@@ -15,6 +15,7 @@ package com.yugabyte.ysql;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -52,6 +53,8 @@ public class LoadBalanceProperties {
   public static final Map<String, LoadBalancer> CONNECTION_MANAGER_MAP =
       new HashMap<>();
 
+  private static Map<LoadBalancerKey, LoadBalanceProperties> loadBalancePropertiesMap =
+      new ConcurrentHashMap();
   private final String originalUrl;
   private final Properties originalProperties;
   private boolean hasLoadBalance;
@@ -62,7 +65,22 @@ public class LoadBalanceProperties {
   private boolean refreshIntervalSpecified;
   private boolean explicitFallbackOnlySpecified;
 
-  public LoadBalanceProperties(String origUrl, Properties origProperties) {
+  public static LoadBalanceProperties getLoadBalanceProperties(String url, Properties properties) {
+    LoadBalancerKey key = new LoadBalancerKey(url, properties);
+    LoadBalanceProperties lbp = loadBalancePropertiesMap.get(key);
+    if (lbp == null) {
+      synchronized (LoadBalanceProperties.class) {
+        lbp = loadBalancePropertiesMap.get(key);
+        if (lbp == null) {
+          lbp = new LoadBalanceProperties(url, properties);
+          loadBalancePropertiesMap.put(key, lbp);
+        }
+      }
+    }
+    return lbp;
+  }
+
+  private LoadBalanceProperties(String origUrl, Properties origProperties) {
     originalUrl = origUrl;
     originalProperties = (Properties) origProperties.clone();
     ybURL = processURLAndProperties();
@@ -198,9 +216,6 @@ public class LoadBalanceProperties {
     if (refreshIntervalSpecified) {
       System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
     }
-    if (explicitFallbackOnlySpecified) {
-      System.setProperty(EXPLICIT_FALLBACK_ONLY_KEY, String.valueOf(explicitFallbackOnly));
-    }
     LoadBalancer ld = null;
     if (placements == null) {
       // return base class conn manager.
@@ -215,17 +230,35 @@ public class LoadBalanceProperties {
         }
       }
     } else {
-      ld = CONNECTION_MANAGER_MAP.get(placements);
+      String key = placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase();
+      ld = CONNECTION_MANAGER_MAP.get(key);
       if (ld == null) {
         synchronized (CONNECTION_MANAGER_MAP) {
-          ld = CONNECTION_MANAGER_MAP.get(placements);
+          ld = CONNECTION_MANAGER_MAP.get(key);
           if (ld == null) {
-            ld = new TopologyAwareLoadBalancer(placements);
-            CONNECTION_MANAGER_MAP.put(placements, ld);
+            ld = new TopologyAwareLoadBalancer(placements, explicitFallbackOnly);
+            CONNECTION_MANAGER_MAP.put(key, ld);
           }
         }
       }
     }
     return ld;
+  }
+
+  private static class LoadBalancerKey {
+    private String url;
+    private Properties properties;
+
+    public LoadBalancerKey(String url, Properties properties) {
+      this.url = url;
+      this.properties = properties;
+    }
+
+    public boolean equals(Object other) {
+      return other instanceof LoadBalancerKey &&
+          url != null && url.equals(((LoadBalancerKey) other).url) &&
+          properties != null &&
+          properties.equals(((LoadBalancerKey) other).properties);
+    }
   }
 }

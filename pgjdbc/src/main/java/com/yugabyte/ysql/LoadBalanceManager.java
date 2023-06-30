@@ -235,7 +235,8 @@ public class LoadBalanceManager {
 
   public static Connection getConnection(String url, Properties properties, String user,
       String database) {
-    LoadBalanceProperties lbProperties = new LoadBalanceProperties(url, properties);
+    LoadBalanceProperties lbProperties = LoadBalanceProperties.getLoadBalanceProperties(url,
+        properties);
     // Cleanup extra properties used for load balancing?
     if (lbProperties.hasLoadBalance()) {
       Connection conn = getConnection(lbProperties,  user, database);

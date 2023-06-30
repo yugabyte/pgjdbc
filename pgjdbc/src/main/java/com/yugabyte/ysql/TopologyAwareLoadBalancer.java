@@ -40,10 +40,12 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private int currentPlacementIndex = 1;
   List<String> attempted = new ArrayList<>();
   private int refreshIntervalSeconds;
+  private boolean explicitFallbackOnly = false;
 
 
-  public TopologyAwareLoadBalancer(String placementValues) {
+  public TopologyAwareLoadBalancer(String placementValues, boolean onlyExplicitFallback) {
     placements = placementValues;
+    explicitFallbackOnly = onlyExplicitFallback;
     refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);
     parseGeoLocations();
   }
@@ -97,11 +99,14 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     return Integer.getInteger(REFRESH_INTERVAL_KEY, refreshIntervalSeconds);
   }
 
+  public boolean isExplicitFallbackOnly() {
+    return explicitFallbackOnly;
+  }
+
   @Override
   public boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e) {
     Set<LoadBalanceManager.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
-    boolean onlyExplicitFallback = Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY);
-    boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX && !onlyExplicitFallback)
+    boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX && !explicitFallbackOnly)
         || (set != null && e.getValue().getPlacement().isContainedIn(set));
     boolean isAttempted = attempted.contains(e.getKey());
     boolean isDown = e.getValue().isDown();
