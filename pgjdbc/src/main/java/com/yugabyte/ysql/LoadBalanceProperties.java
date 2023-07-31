@@ -30,7 +30,7 @@ public class LoadBalanceProperties {
    * cluster nodes. false means fallback to entire cluster nodes when nodes in explicit
    * placements are unavailable.
    */
-  public static final String EXPLICIT_FALLBACK_ONLY_KEY = "explicit-fallback-only";
+  public static final String EXPLICIT_FALLBACK_ONLY_KEY = "fallback-to-topology-keys-only";
   /**
    * The default value should ideally match the interval at which the server-list is updated at
    * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
