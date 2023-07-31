@@ -22,6 +22,7 @@ import java.util.logging.Logger;
 public class LoadBalanceManager {
 
   private static ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
+  private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger(LoadBalanceManager.class.getName());
   private static long lastRefreshTime;
@@ -104,13 +105,13 @@ public class LoadBalanceManager {
           LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 instead.");
           nodeInfo.port = 5433;
         }
-        long failedHostTTL = Long.getLong("failed-host-ttl-seconds", DEFAULT_FAILED_HOST_TTL_SECONDS);
+        long failedHostTTL = Long.getLong("failed-host-reconnect-delay-secs", DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-ttl has elapsed");
+            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs has elapsed");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.fine("Keeping " + nodeInfo.host + " marked as DOWN since failed-host-ttl not elapsed");
+            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs has not elapsed");
           }
         }
       }
@@ -304,20 +305,17 @@ public class LoadBalanceManager {
       Properties props = loadBalanceProperties.getOriginalProperties();
       String url = loadBalanceProperties.getStrippedURL();
       HostSpec[] hspec = hostSpecs(props);
-      Connection controlConnection = null;
-      boolean connectionCreated = false;
-      boolean gotException = false;
 
       ArrayList<String> hosts = getAllAvailableHosts(new ArrayList<>());
       while (true) {
         try {
-          controlConnection = new PgConnection(hspec, user, dbName, props, url);
-          connectionCreated = true;
+          if (controlConnection == null || controlConnection.isClosed()) {
+            controlConnection = new PgConnection(hspec, user, dbName, props, url);
+          }
           refresh(controlConnection, lb.getRefreshListSeconds());
           controlConnection.close();
           break;
         } catch (SQLException ex) {
-          gotException = true;
           if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
             LOGGER.warning("Received error UNDEFINED_FUNCTION (42883)");
             return false;
@@ -332,7 +330,7 @@ public class LoadBalanceManager {
             hosts.remove(h.getHost());
           }
           if (hosts.isEmpty()) {
-            LOGGER.fine("Failed to establish control connection");
+            LOGGER.fine("Failed to establish control connection to available servers");
             return false;
           } else {
             // Try the first host in the list (don't have to check least loaded one since it's
@@ -340,16 +338,7 @@ public class LoadBalanceManager {
             HostSpec hs = new HostSpec(hosts.get(0), LoadBalanceManager.getPort(hosts.get(0)),
                 loadBalanceProperties.getOriginalProperties().getProperty("localSocketAddress"));
             hspec = new HostSpec[]{hs};
-          }
-        } catch (Exception e) {
-          gotException = true;
-          throw e;
-        } finally {
-          if (gotException && connectionCreated) {
-            try {
-              controlConnection.close();
-            } catch (SQLException e) {
-            }
+            controlConnection = null;
           }
         }
       }
