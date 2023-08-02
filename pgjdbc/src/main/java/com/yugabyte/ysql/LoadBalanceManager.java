@@ -1,6 +1,7 @@
 package com.yugabyte.ysql;
 
 import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_FAILED_HOST_TTL_SECONDS;
+import static com.yugabyte.ysql.LoadBalanceProperties.FAILED_HOST_RECONNECT_DELAY_SECS_KEY;
 import static org.postgresql.Driver.hostSpecs;
 
 import org.postgresql.jdbc.PgConnection;
@@ -105,7 +106,7 @@ public class LoadBalanceManager {
           LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 instead.");
           nodeInfo.port = 5433;
         }
-        long failedHostTTL = Long.getLong("failed-host-reconnect-delay-secs", DEFAULT_FAILED_HOST_TTL_SECONDS);
+        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
             LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs has elapsed");

@@ -25,12 +25,19 @@ public class LoadBalanceProperties {
   public static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
   public static final String REFRESH_INTERVAL_KEY = "yb-servers-refresh-interval";
   /**
-   * Can have value either true or false. Default is false.
-   * true means stick to explicitly given placements for fallback, do not fallback to entire
-   * cluster nodes. false means fallback to entire cluster nodes when nodes in explicit
+   * The value can either be true or false. Default is false.
+   * true means stick to explicitly given placements for fallback, and do not fall back to entire
+   * cluster nodes. false means fall back to entire cluster nodes when nodes in explicit
    * placements are unavailable.
    */
   public static final String EXPLICIT_FALLBACK_ONLY_KEY = "fallback-to-topology-keys-only";
+  /**
+   * The driver marks a server as failed with a timestamp, when it cannot connect to it. Later,
+   * whenever it refreshes the server list via yb_servers(), if it sees the failed server in the
+   * response, it marks the server as UP only if the time specified via this property has elapsed
+   * since the time it was last marked as a failed host.
+   */
+  public static final String FAILED_HOST_RECONNECT_DELAY_SECS_KEY = "failed-host-reconnect-delay-secs";
   /**
    * The default value should ideally match the interval at which the server-list is updated at
    * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
@@ -44,6 +51,7 @@ public class LoadBalanceProperties {
   public static final int MAX_PREFERENCE_VALUE = 10;
   public static final int DEFAULT_REFRESH_INTERVAL = 300;
   public static final int MAX_REFRESH_INTERVAL = 600;
+  public static final int MAX_FAILED_HOST_RECONNECT_DELAY_SECS = 60;
 
   private static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
@@ -63,7 +71,8 @@ public class LoadBalanceProperties {
   private int refreshInterval = -1;
   private boolean explicitFallbackOnly;
   private boolean refreshIntervalSpecified;
-  private boolean explicitFallbackOnlySpecified;
+  private int failedHostReconnectDelaySecs = -1;
+  private boolean failedHostReconnectDelaySpecified;
 
   public static LoadBalanceProperties getLoadBalanceProperties(String url, Properties properties) {
     LoadBalancerKey key = new LoadBalancerKey(url, properties);
@@ -95,6 +104,7 @@ public class LoadBalanceProperties {
       String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
       String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
       String explicitFallbackOnlyKey = EXPLICIT_FALLBACK_ONLY_KEY;
+      String failedHostReconnectDelayKey = FAILED_HOST_RECONNECT_DELAY_SECS_KEY + EQUALS;
       for (String part : urlParts) {
         if (part.startsWith(loadBalancerKey)) {
           String[] lbParts = part.split(EQUALS);
@@ -139,7 +149,24 @@ public class LoadBalanceProperties {
           if (propValue.equalsIgnoreCase("true")) {
             this.explicitFallbackOnly = true;
           }
-          explicitFallbackOnlySpecified = true;
+        } else if (part.startsWith(failedHostReconnectDelayKey)) {
+          String[] lbParts = part.split(EQUALS);
+          if (lbParts.length != 2) {
+            LOGGER.log(Level.WARNING,
+                "No valid value provided for " + FAILED_HOST_RECONNECT_DELAY_SECS_KEY + ". " +
+                "Ignoring it.");
+            continue;
+          }
+          try {
+            failedHostReconnectDelaySecs = Integer.parseInt(lbParts[1]);
+            if (failedHostReconnectDelaySecs < 0 || failedHostReconnectDelaySecs > MAX_FAILED_HOST_RECONNECT_DELAY_SECS) {
+              failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
+            } else {
+              failedHostReconnectDelaySpecified = true;
+            }
+          } catch (NumberFormatException nfe) {
+            failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
+          }
         } else {
           if (sb.toString().contains("?")) {
             sb.append(PROPERTY_SEP);
@@ -180,7 +207,19 @@ public class LoadBalanceProperties {
         if (propValue.equalsIgnoreCase("true")) {
           explicitFallbackOnly = true;
         }
-        explicitFallbackOnlySpecified = true;
+      }
+      if (originalProperties.containsKey(FAILED_HOST_RECONNECT_DELAY_SECS_KEY)) {
+        String propValue = originalProperties.getProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY);
+        try {
+          failedHostReconnectDelaySecs = Integer.parseInt(propValue);
+          if (failedHostReconnectDelaySecs < 0 || failedHostReconnectDelaySecs > MAX_FAILED_HOST_RECONNECT_DELAY_SECS) {
+            failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
+          } else {
+            failedHostReconnectDelaySpecified = true;
+          }
+        } catch (NumberFormatException nfe) {
+          failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
+        }
       }
     }
     return sb.toString();
@@ -215,6 +254,9 @@ public class LoadBalanceProperties {
     //  singleton for a given placement, so cannot include these in it.
     if (refreshIntervalSpecified) {
       System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
+    }
+    if (failedHostReconnectDelaySpecified) {
+      System.setProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, String.valueOf(failedHostReconnectDelaySecs));
     }
     LoadBalancer ld = null;
     if (placements == null) {
