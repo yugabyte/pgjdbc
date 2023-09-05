@@ -537,7 +537,12 @@ public enum PGProperty {
   YB_TOPOLOGY_KEYS(
       "topology-keys",
       null,
-      "Load Balance connections only in the given topolgies"),
+      "Load Balance connections only in the given topologies"),
+
+  YB_SERVERS_REFRESH_INTERVAL(
+      "yb-servers-refresh-interval",
+      "300",
+      "Refresh the list of nodes after given interval"),
 
   /**
    * Configure optimization to enable batch insert re-writing.
