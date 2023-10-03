@@ -28,6 +28,10 @@ public class YBClusterAwareDataSource extends PGSimpleDataSource {
     PGProperty.YB_LOAD_BALANCE.set(properties, value);
   }
 
+  public void setYbServersRefreshInterval(String value) {
+    PGProperty.YB_SERVERS_REFRESH_INTERVAL.set(properties, value);
+  }
+
   public void setTopologyKeys(String value) {
     PGProperty.YB_TOPOLOGY_KEYS.set(properties, value);
   }
