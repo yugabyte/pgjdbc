@@ -103,6 +103,27 @@ public class FallbackLoadBalanceExample {
       input.put("127.0.0.3", 6);
       verifyCount(input);
 
+      executeCmd(path + "/bin/yb-ctl start_node 1 --placement_info \"aws.us-west.us-west-1a\"",
+          "Start node 1", 20);
+      pause();
+      //Sleep for 10 sec to make sure refresh happens and hikari pool is recreated
+      try {
+        Thread.sleep(10000);
+      } catch (InterruptedException io) {
+      }
+      input.clear();
+      input.put("127.0.0.1", 4);
+      input.put("127.0.0.2", 4);
+      input.put("127.0.0.3", 4);
+      verifyCount(input);
+
+      executeCmd(path + "/bin/yb-ctl stop_node 1", "Stop node 1", 10);
+      pause();
+      input.clear();
+      input.put("127.0.0.2", 6);
+      input.put("127.0.0.3", 6);
+      verifyCount(input);
+
       executeCmd(path + "/bin/yb-ctl stop_node 2", "Stop node 2", 10);
       pause();
       input.clear();
@@ -196,7 +217,7 @@ public class FallbackLoadBalanceExample {
     poolProperties.setProperty("dataSourceClassName", ds_yb);
     poolProperties.setProperty("maximumPoolSize", "12");
     poolProperties.setProperty("allowPoolSuspension", "true");
-    poolProperties.setProperty("maxLifetime", "0");
+    poolProperties.setProperty("maxLifetime", "35000");
     poolProperties.setProperty("idleTimeout", "0");
     poolProperties.setProperty("validationTimeout", "2000");
     poolProperties.setProperty("keepaliveTime", "30000"); // 120000
@@ -210,6 +231,7 @@ public class FallbackLoadBalanceExample {
     poolProperties.setProperty("dataSource.topologyKeys", "aws.us-west.*:1,aws.us-east.*:2,aws" +
         ".eu-west.*:3");
     poolProperties.setProperty("dataSource.loadBalanceHosts", "true");
+    poolProperties.setProperty("dataSource.ybServersRefreshInterval", "30");
 
     HikariConfig hikariConfig = new HikariConfig(poolProperties);
     hikariConfig.validate();
