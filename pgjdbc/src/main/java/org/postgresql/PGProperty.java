@@ -542,7 +542,7 @@ public enum PGProperty {
   YB_SERVERS_REFRESH_INTERVAL(
       "yb-servers-refresh-interval",
       "300",
-      "Refresh the list of nodes after given interval"),
+      "Refresh the list of nodes after given interval in seconds"),
 
   /**
    * Configure optimization to enable batch insert re-writing.
