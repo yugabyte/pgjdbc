@@ -314,7 +314,6 @@ public class LoadBalanceManager {
             controlConnection = new PgConnection(hspec, user, dbName, props, url);
           }
           refresh(controlConnection, lb.getRefreshListSeconds());
-          controlConnection.close();
           break;
         } catch (SQLException ex) {
           if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
