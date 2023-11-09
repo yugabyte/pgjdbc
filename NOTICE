@@ -1,3 +1,20 @@
+Yugabyte pgjdbc driver
+
+Copyright (c) 2019, Yugabyte Inc. All rights reserved.
+
+This product is licensed to you under the BSD 2-Clause "Simplified" License (the "License").
+You may not use this product except in compliance with the BSD 2-Clause "Simplified" License .
+
+This product include a pgjdbc driver as a subcomponent with separate copyright
+notices and license terms. Your use of these subcomponents is subject to the
+terms and conditions of the subcomponent's license, as noted in the LICENSE
+file.
+=================================================================
+  For: PostgreSQL pgjdbc driver
+
+---------------------- BSD 2-Clause "Simplified" License -----------------------
+=================================================================
+
 Copyright (c) 1997, PostgreSQL Global Development Group
 All rights reserved.
 
