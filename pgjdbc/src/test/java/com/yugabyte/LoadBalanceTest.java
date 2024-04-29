@@ -3,7 +3,6 @@ package com.yugabyte;
 import static com.yugabyte.FallbackOptionsLBTest.*;
 import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
 
-import com.yugabyte.ysql.LoadBalanceManager;
 import com.yugabyte.ysql.LoadBalanceProperties;
 
 import java.sql.Connection;
@@ -16,7 +15,8 @@ public class LoadBalanceTest {
   private static int numConnectionsPerThread = 2;
   private static int numThreads = 24;
   private static boolean waitForSignal = true;
-  private static String baseUrl = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true"; // &loggerLevel=DEBUG";
+  private static String baseUrl = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true"
+      + "&" + LoadBalanceProperties.REFRESH_INTERVAL_KEY + "=1"; // &loggerLevel=DEBUG";
 
   private static String baseTAUrl =
       baseUrl + "&" + LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY + "=";
@@ -28,32 +28,32 @@ public class LoadBalanceTest {
     Class.forName("org.postgresql.Driver");
 
     Map<String, Integer> expected1 = new HashMap<>();
-    expected1.put("127.0.0.1", numThreads/3);
+    expected1.put("127.0.0.1", numThreads/3 + 1); // +1 for control connection
     expected1.put("127.0.0.2", numThreads/3);
     expected1.put("127.0.0.3", numThreads/3);
     int total = numThreads * numConnectionsPerThread;
     Map<String, Integer> expected2 = new HashMap<>();
-    expected2.put("127.0.0.1", total/4);
+    expected2.put("127.0.0.1", total/4 + 1); // +1 for control connection
     expected2.put("127.0.0.2", total/4);
     expected2.put("127.0.0.3", total/4);
     expected2.put("127.0.0.4", total/4);
-    testConcurrentConnectionCreations(baseUrl, expected1, expected2);
+    testConcurrentConnectionCreations(baseUrl, expected1, expected2, "127.0.0.1");
 
     String tkValues = "aws.us-west.us-west-2z:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:2";
     expected1.clear();
-    expected1.put("127.0.0.1", 0);
+    expected1.put("127.0.0.1", +1); // control connection
     expected1.put("127.0.0.2", numThreads/2);
     expected1.put("127.0.0.3", numThreads/2);
     expected2.clear();
-    expected2.put("127.0.0.1", 0);
+    expected2.put("127.0.0.1", +1);
     expected2.put("127.0.0.2", numThreads/2);
-    expected2.put("127.0.0.3", numThreads/2);
+    expected2.put("127.0.0.3", numThreads/2); // control connection
     expected2.put("127.0.0.4", numThreads);
-    testConcurrentConnectionCreations(baseTAUrl + tkValues, expected1, expected2);
+    testConcurrentConnectionCreations(baseTAUrl + tkValues, expected1, expected2, "127.0.0.1");
   }
 
   private static void testConcurrentConnectionCreations(String url,
-      Map<String, Integer> expected1, Map<String, Integer> expected2) throws SQLException,
+      Map<String, Integer> expected1, Map<String, Integer> expected2, String controlHost) throws SQLException,
       InterruptedException {
     System.out.println("Running testConcurrentConnectionCreations() with url " + url);
     startYBDBCluster();
@@ -78,34 +78,38 @@ public class LoadBalanceTest {
             }
             connections[j + numThreads] = DriverManager.getConnection(url, "yugabyte", "yugabyte");
           } catch (SQLException e) {
-            System.out.println(e);
+            System.out.println("getConnection() failed: " + e);
           }
         });
       }
 
       for (int i = 0 ; i < numThreads; i++) {
+        threads[i].setDaemon(true);
         threads[i].start();
       }
       System.out.println("Launched " + numThreads + " threads to create " + numConnectionsPerThread + " connections each");
 
       Thread.sleep(10000);
       for (Map.Entry<String, Integer> e : expected1.entrySet()) {
-        verifyOn(e.getKey(), e.getValue(), "");
+        verifyOn(e.getKey(), e.getValue(), controlHost);
         System.out.print(", ");
       }
 
       executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-west.us-west-2z\"",
-          "Add node", 10);
+          "Add node", 15);
       // Sometimes, the cluster is not available for connections immediately. So wait a bit
       Thread.sleep(10000);
-      LoadBalanceManager.setForceRefreshOnce();
       waitForSignal = false;
       for (int i = 0; i < numThreads; i++) {
-        threads[i].join();
+        try {
+          threads[i].join();
+        } catch (InterruptedException e) {
+          System.out.println("Thread " + i + " interrupted: " + e);
+        }
       }
 
       for (Map.Entry<String, Integer> e : expected2.entrySet()) {
-        verifyOn(e.getKey(), e.getValue(), "");
+        verifyOn(e.getKey(), e.getValue(), controlHost);
         System.out.print(", ");
       }
 
@@ -115,10 +119,9 @@ public class LoadBalanceTest {
       }
 
     } finally {
-      LoadBalanceManager.clear();
       waitForSignal = true;
       CONNECTION_MANAGER_MAP.clear();
-      executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
+      executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 15);
     }
   }
 }
