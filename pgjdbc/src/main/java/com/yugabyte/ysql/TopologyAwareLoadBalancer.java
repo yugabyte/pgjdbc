@@ -13,9 +13,19 @@
 
 package com.yugabyte.ysql;
 
-import static com.yugabyte.ysql.LoadBalanceProperties.*;
+import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+import static com.yugabyte.ysql.LoadBalanceProperties.LOCATIONS_DELIMITER;
+import static com.yugabyte.ysql.LoadBalanceProperties.MAX_PREFERENCE_VALUE;
+import static com.yugabyte.ysql.LoadBalanceProperties.PREFERENCE_DELIMITER;
+import static com.yugabyte.ysql.LoadBalanceProperties.REFRESH_INTERVAL_KEY;
+import static com.yugabyte.ysql.LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
@@ -42,7 +52,6 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private int refreshIntervalSeconds;
   private boolean explicitFallbackOnly = false;
 
-
   public TopologyAwareLoadBalancer(String placementValues, boolean onlyExplicitFallback) {
     placements = placementValues;
     explicitFallbackOnly = onlyExplicitFallback;
@@ -62,8 +71,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       // Return an error so the user takes corrective action.
       LOGGER.warning(
           "Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property value: " + placement);
-      throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY + " property " +
-          "value: " + placement);
+      throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY
+          + " property value: " + placement);
     }
     LoadBalanceManager.CloudPlacement cp = new LoadBalanceManager.CloudPlacement(
         placementParts[0], placementParts[1], placementParts[2]);
@@ -110,8 +119,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         || (set != null && e.getValue().getPlacement().isContainedIn(set));
     boolean isAttempted = attempted.contains(e.getKey());
     boolean isDown = e.getValue().isDown();
-    LOGGER.fine(e.getKey() + " has required placement? " + found + ", isDown? " + isDown + ", " +
-        "attempted? " + isAttempted);
+    LOGGER.fine(e.getKey() + " has required placement? " + found + ", isDown? "
+        + isDown + ", attempted? " + isAttempted);
     return found
         && !isAttempted
         && !isDown;
@@ -159,8 +168,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       if (chosenHost != null) {
         LoadBalanceManager.incrementConnectionCount(chosenHost);
       } else {
-        LOGGER.fine("chosenHost is null for placement level " + currentPlacementIndex + ", " +
-            "allowedPlacements: " + allowedPlacements);
+        LOGGER.fine("chosenHost is null for placement level " + currentPlacementIndex
+            + ", allowedPlacements: " + allowedPlacements);
         currentPlacementIndex += 1;
         while (allowedPlacements.get(currentPlacementIndex) == null && currentPlacementIndex > 0) {
           currentPlacementIndex += 1;
