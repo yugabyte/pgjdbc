@@ -32,10 +32,6 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public static ClusterAwareLoadBalancer instance() {
-    return instance;
-  }
-
   public ClusterAwareLoadBalancer() {
   }
 
