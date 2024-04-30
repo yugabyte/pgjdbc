@@ -38,13 +38,6 @@ public class LoadBalanceManager {
   /**
    * FOR TEST PURPOSE ONLY
    */
-  public static void setForceRefreshOnce() {
-    forceRefreshOnce = true;
-  }
-
-  /**
-   * FOR TEST PURPOSE ONLY
-   */
   public static void printHostToConnectionMap() {
     System.out.println("Current load on servers");
     System.out.println("-------------------");

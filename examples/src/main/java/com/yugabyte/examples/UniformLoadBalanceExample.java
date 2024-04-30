@@ -63,7 +63,6 @@ public class UniformLoadBalanceExample {
 
       //This is just for demo purpose because right now default time for refresh is 5min
       //and we don't want the user to wait that much in this app
-      LoadBalanceManager.setForceRefreshOnce();
 
       Properties poolProperties = new Properties();
       if (debugLogging) {
