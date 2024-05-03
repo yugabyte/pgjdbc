@@ -1,4 +1,4 @@
-#!/bin/bash                                                
+#!/bin/bash
 
 # Copyright (c) YugaByte, Inc.
 #
@@ -41,15 +41,15 @@ finish() {
   kill -9 $2 >> yb-ctl.log 2>&1
 
   #deleting the temporary files
-  rm -rf .jdbc_example_app_checker  
+  rm -rf .jdbc_example_app_checker
   rm -rf .jdbc_example_app_checker2
-  rm -rf .jdbc_example_app_checker3 
+  rm -rf .jdbc_example_app_checker3
   rm -rf .notify_shell_script
 }
 
 #this function basically checks the $file content and keep it paused until required content is present
 pauseScript() {
-  #just creating the file if it doesn't exsits
+  #just creating the file if it doesn't exist
   file=.notify_shell_script
   touch $file
 
@@ -80,11 +80,11 @@ $INSTALL_DIR/bin/yb-ctl destroy  > yb-ctl.log 2>&1
 
 echo "Creating a 3-node, RF-3 cluster (live nodes: 1,2,3)"
 $INSTALL_DIR/bin/yb-ctl create --rf 3  >> yb-ctl.log 2>&1
-
+SLEEP 5
 
 #deleting the checker file if exists
 verbosePrint $VERBOSE "Deleting all the temporary checker files if exists"
-rm -rf .jdbc_example_app_checker  
+rm -rf .jdbc_example_app_checker
 rm -rf .jdbc_example_app_checker2
 rm -rf .jdbc_example_app_checker3 #to keep the java app running until killed
 rm -rf .notify_shell_script
@@ -106,6 +106,7 @@ interact $INTERACTIVE
 
 echoSleep "Adding Node-4 to the cluster (live nodes: 1,2,3,4)"
 $INSTALL_DIR/bin/yb-ctl add_node >> yb-ctl.log 2>&1
+SLEEP 5
 
 touch .jdbc_example_app_checker   #resuming the java app
 

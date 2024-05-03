@@ -133,11 +133,16 @@ public class LoadBalanceProperties {
           try {
             refreshInterval = Integer.parseInt(lbParts[1]);
             if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
+              LOGGER.warning("Provided yb-servers-refresh-interval ("
+                  + refreshInterval + ") is outside the permissible range,"
+                  + " setting it to 300 seconds");
               refreshInterval = DEFAULT_REFRESH_INTERVAL;
             } else {
               refreshIntervalSpecified = true;
             }
           } catch (NumberFormatException nfe) {
+            LOGGER.warning("Provided yb-servers-refresh-interval ("
+                + refreshInterval + ") is invalid, setting it to 300 seconds");
             refreshInterval = DEFAULT_REFRESH_INTERVAL;
           }
         } else if (part.startsWith(explicitFallbackOnlyKey)) {
@@ -194,11 +199,16 @@ public class LoadBalanceProperties {
         try {
           refreshInterval = Integer.parseInt(propValue);
           if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
+            LOGGER.warning("Provided yb-servers-refresh-interval ("
+                + refreshInterval + ") is outside the permissible range,"
+                + " setting it to 300 seconds");
             refreshInterval = DEFAULT_REFRESH_INTERVAL;
           } else {
             refreshIntervalSpecified = true;
           }
         } catch (NumberFormatException nfe) {
+          LOGGER.warning("Provided yb-servers-refresh-interval ("
+              + refreshInterval + ") is invalid, setting it to 300 seconds");
           refreshInterval = DEFAULT_REFRESH_INTERVAL;
         }
       }

@@ -42,12 +42,11 @@ public class UniformLoadBalanceExample {
     String controlHost = "127.0.0.1";
     String controlPort = "5433";
 
+    controlUrl = "jdbc:yugabytedb://" + controlHost + ":" + controlPort
+        + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true"
+        + "&yb-servers-refresh-interval=0";
     if (debugLogging) {
-      controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&loggerLevel=debug&yb-servers-refresh-interval=0";
-    } else {
-      controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&yb-servers-refresh-interval=0";
+      controlUrl = controlUrl + "&loggerLevel=debug";
     }
 
     System.out.println("Setting up the connection pool having 6 connections.......");
@@ -83,6 +82,7 @@ public class UniformLoadBalanceExample {
       if (!lbpropvalue.equals("true")) {
         poolProperties.setProperty("dataSource.topologyKeys", lookupKey);
       }
+      poolProperties.setProperty("dataSource.ybServersRefreshInterval", "0");
 
       HikariConfig hikariConfig = new HikariConfig(poolProperties);
       hikariConfig.validate();
