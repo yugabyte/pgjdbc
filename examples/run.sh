@@ -83,7 +83,7 @@ echo "Choose one of the below options"
 echo "1. Demonstrate Uniform Load Balance"
 echo "2. Demonstrate Topology Aware Load Balance"
 echo "3. Demonstrate Fallback feature of Topology Aware Load Balance"
-read -p "Please enter your option and then press enter:" choice
+read -p "Please enter your option and then press enter: " choice
 echo ""
 
 case $choice in

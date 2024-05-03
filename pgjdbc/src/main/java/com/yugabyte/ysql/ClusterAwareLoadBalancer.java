@@ -41,8 +41,10 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
         if (instance == null) {
           instance = new ClusterAwareLoadBalancer();
           instance.refreshListSeconds =
-              refreshListSeconds > 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
+              refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
                   refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+          LOGGER.fine("Created a new cluster-aware LB instance with refresh" +
+              " interval " + instance.refreshListSeconds + " seconds");
         }
       }
     }
