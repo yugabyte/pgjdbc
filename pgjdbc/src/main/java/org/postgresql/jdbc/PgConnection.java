@@ -59,6 +59,8 @@ import org.postgresql.xml.PGXmlFactoryFactory;
 
 import com.yugabyte.ysql.LoadBalanceManager;
 import com.yugabyte.ysql.LoadBalancer;
+import com.yugabyte.ysql.YBDriver;
+
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.checkerframework.dataflow.qual.Pure;
@@ -771,9 +773,11 @@ public class PgConnection implements BaseConnection {
     releaseTimer();
     queryExecutor.close();
     openStackTrace = null;
-    String host = queryExecutor.getHostSpec().getHost();
-    if (loadBalancer != null && host != null) {
-      LoadBalanceManager.decrementConnectionCount(host);
+    if (Driver.custDriver instanceof YBDriver ) {
+      String host = queryExecutor.getHostSpec().getHost();
+      if (loadBalancer != null && host != null) {
+        LoadBalanceManager.decrementConnectionCount(host);
+      }
     }
   }
 

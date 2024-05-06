@@ -38,6 +38,8 @@ import org.postgresql.util.SharedTimer;
 import org.postgresql.util.URLCoder;
 
 import com.yugabyte.ysql.LoadBalanceManager;
+import com.yugabyte.ysql.YBDriver;
+
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.IOException;
@@ -87,6 +89,7 @@ public class Driver implements java.sql.Driver {
   private static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
   private static final SharedTimer SHARED_TIMER = new SharedTimer();
   private static final String DEFAULT_PORT = "5433";
+  public static CustomDriver custDriver;
 
   static {
     try {
@@ -266,6 +269,7 @@ public class Driver implements java.sql.Driver {
     if ((props = parseURL(url, props)) == null) {
       return null;
     }
+    custDriver = loadCustomDriver(props);
     try {
       // Setup java.util.logging.Logger using connection properties.
       setupLoggerFromProperties(props);
@@ -282,7 +286,7 @@ public class Driver implements java.sql.Driver {
       // more details.
       long timeout = timeout(props);
       if (timeout <= 0) {
-        return makeConnection(url, props);
+        return custDriver.makeConnection(url, props);
       }
 
       ConnectThread ct = new ConnectThread(url, props);
@@ -393,7 +397,7 @@ public class Driver implements java.sql.Driver {
       Throwable error;
 
       try {
-        conn = makeConnection(url, props);
+        conn = custDriver.makeConnection(url, props);
         error = null;
       } catch (Throwable t) {
         conn = null;
@@ -471,25 +475,6 @@ public class Driver implements java.sql.Driver {
     private @Nullable Connection result;
     private @Nullable Throwable resultException;
     private boolean abandoned;
-  }
-
-  /**
-   * Create a connection from URL and properties. Always does the connection work in the current
-   * thread without enforcing a timeout, regardless of any timeout specified in the properties.
-   *
-   * @param url the original URL
-   * @param properties the parsed/defaulted connection properties
-   * @return a new connection
-   * @throws SQLException if the connection could not be made
-   */
-  private static Connection makeConnection(String url, Properties properties) throws SQLException {
-    Connection connection = LoadBalanceManager.getConnection(url, properties, user(properties),
-        database(properties));
-    if (connection != null) {
-      return connection;
-    }
-    return new PgConnection(hostSpecs(properties), user(properties), database(properties),
-        properties, url);
   }
 
   /**
@@ -760,14 +745,14 @@ public class Driver implements java.sql.Driver {
   /**
    * @return the username of the URL
    */
-  private static String user(Properties props) {
+  public static String user(Properties props) {
     return props.getProperty("user", "");
   }
 
   /**
    * @return the database name of the URL
    */
-  private static String database(Properties props) {
+  public static String database(Properties props) {
     return props.getProperty("PGDBNAME", "");
   }
 
@@ -829,6 +814,22 @@ public class Driver implements java.sql.Driver {
     Driver registeredDriver = new Driver();
     DriverManager.registerDriver(registeredDriver);
     Driver.registeredDriver = registeredDriver;
+  }
+
+  public static CustomDriver loadCustomDriver(Properties props) throws SQLException {
+    try {
+      String custom_driver = PGProperty.CUSTOM_DRIVER_CLASS.get(props);
+      if (custom_driver != null){
+        if (custom_driver.equalsIgnoreCase("com.yugabyte.ysql.YBDriver"))
+        return new YBDriver();
+      } else {
+        return new DefaultCustomDriver();
+      }
+    } catch (Exception e) {
+      //stripurl();
+      return new DefaultCustomDriver();
+    }
+    return new DefaultCustomDriver();
   }
 
   /**

@@ -539,6 +539,11 @@ public enum PGProperty {
       null,
       "Load Balance connections only in the given topologies"),
 
+  CUSTOM_DRIVER_CLASS(
+        "customdriverclass",
+        null,
+        "Class name of the custom driver, class should implement CustomDriver interface"),
+
   YB_SERVERS_REFRESH_INTERVAL(
       "yb-servers-refresh-interval",
       "300",
