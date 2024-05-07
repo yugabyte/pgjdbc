@@ -22,6 +22,7 @@ package org.postgresql.jdbc;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
+import org.postgresql.CustomDriver;
 import org.postgresql.Driver;
 import org.postgresql.PGNotification;
 import org.postgresql.PGProperty;
@@ -773,12 +774,7 @@ public class PgConnection implements BaseConnection {
     releaseTimer();
     queryExecutor.close();
     openStackTrace = null;
-    if (Driver.custDriver instanceof YBDriver ) {
-      String host = queryExecutor.getHostSpec().getHost();
-      if (loadBalancer != null && host != null) {
-        LoadBalanceManager.decrementConnectionCount(host);
-      }
-    }
+    Driver.custDriver.close(queryExecutor);
   }
 
   public void setLoadBalancer(LoadBalancer lb) {
