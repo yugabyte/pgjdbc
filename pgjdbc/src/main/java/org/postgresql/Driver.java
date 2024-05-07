@@ -222,7 +222,7 @@ public class Driver implements java.sql.Driver {
    * <p>Our protocol takes the forms:</p>
    *
    * <pre>
-   *  jdbc:yugabytedb://host:port/database?param1=val1&amp;...
+   *  jdbc:postgresql:://host:port/database?param1=val1&amp;...
    * </pre>
    *
    * @param url the URL of the database to connect to
@@ -240,7 +240,7 @@ public class Driver implements java.sql.Driver {
     // get defaults
     Properties defaults;
 
-    if (!url.startsWith("jdbc:yugabytedb:")) {
+    if (!url.startsWith("jdbc:postgresql:")) {
       return null;
     }
     try {
@@ -480,7 +480,7 @@ public class Driver implements java.sql.Driver {
   /**
    * Returns true if the driver thinks it can open a connection to the given URL. Typically, drivers
    * will return true if they understand the subprotocol specified in the URL and false if they
-   * don't. Our protocols start with jdbc:yugabytedb:
+   * don't. Our protocols start with jdbc:postgresql:
    *
    * @param url the URL of the driver
    * @return true if this driver accepts the given URL
@@ -581,11 +581,11 @@ public class Driver implements java.sql.Driver {
       urlArgs = url.substring(qPos + 1);
     }
 
-    if (!urlServer.startsWith("jdbc:yugabytedb:")) {
-      LOGGER.log(Level.FINE, "JDBC URL must start with \"jdbc:yugabytedb:\" but was: {0}", url);
+    if (!urlServer.startsWith("jdbc:postgresql:")) {
+      LOGGER.log(Level.FINE, "JDBC URL must start with \"jdbc:postgresql:\" but was: {0}", url);
       return null;
     }
-    urlServer = urlServer.substring("jdbc:yugabytedb:".length());
+    urlServer = urlServer.substring("jdbc:postgresql:".length());
 
     if (urlServer.equals("//") || urlServer.equals("///")) {
       urlServer = "";
@@ -743,6 +743,7 @@ public class Driver implements java.sql.Driver {
   }
 
   /**
+   * @param props the properties to create hostSpec off
    * @return the username of the URL
    */
   public static String user(Properties props) {
@@ -750,6 +751,7 @@ public class Driver implements java.sql.Driver {
   }
 
   /**
+   * @param props the properties to create hostSpec off
    * @return the database name of the URL
    */
   public static String database(Properties props) {
@@ -821,15 +823,17 @@ public class Driver implements java.sql.Driver {
       String custom_driver = PGProperty.CUSTOM_DRIVER_CLASS.get(props);
       if (custom_driver != null){
         if (custom_driver.equalsIgnoreCase("com.yugabyte.ysql.YBDriver"))
+        System.out.println("YBDRIVER");
         return new YBDriver();
       } else {
+        System.out.println("DEFAULT");
         return new DefaultCustomDriver();
       }
     } catch (Exception e) {
       //stripurl();
+      System.out.println("DE");
       return new DefaultCustomDriver();
     }
-    return new DefaultCustomDriver();
   }
 
   /**
