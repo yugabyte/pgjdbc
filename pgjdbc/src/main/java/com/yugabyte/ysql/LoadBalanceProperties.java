@@ -130,21 +130,9 @@ public class LoadBalanceProperties {
                 "Ignoring it.");
             continue;
           }
-          try {
-            refreshInterval = Integer.parseInt(lbParts[1]);
-            if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
-              LOGGER.warning("Provided yb-servers-refresh-interval ("
-                  + refreshInterval + ") is outside the permissible range,"
-                  + " setting it to 300 seconds");
-              refreshInterval = DEFAULT_REFRESH_INTERVAL;
-            } else {
-              refreshIntervalSpecified = true;
-            }
-          } catch (NumberFormatException nfe) {
-            LOGGER.warning("Provided yb-servers-refresh-interval ("
-                + refreshInterval + ") is invalid, setting it to 300 seconds");
-            refreshInterval = DEFAULT_REFRESH_INTERVAL;
-          }
+          refreshIntervalSpecified = true;
+          refreshInterval = parseAndGetValue(lbParts[1],
+              DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
         } else if (part.startsWith(explicitFallbackOnlyKey)) {
           String[] lbParts = part.split(EQUALS);
           if (lbParts.length != 2) {
@@ -162,16 +150,9 @@ public class LoadBalanceProperties {
                 "Ignoring it.");
             continue;
           }
-          try {
-            failedHostReconnectDelaySecs = Integer.parseInt(lbParts[1]);
-            if (failedHostReconnectDelaySecs < 0 || failedHostReconnectDelaySecs > MAX_FAILED_HOST_RECONNECT_DELAY_SECS) {
-              failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
-            } else {
-              failedHostReconnectDelaySpecified = true;
-            }
-          } catch (NumberFormatException nfe) {
-            failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
-          }
+          failedHostReconnectDelaySpecified = true;
+          failedHostReconnectDelaySecs = parseAndGetValue(lbParts[1],
+              DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS);
         } else {
           if (sb.toString().contains("?")) {
             sb.append(PROPERTY_SEP);
@@ -195,22 +176,8 @@ public class LoadBalanceProperties {
         placements = propValue;
       }
       if (originalProperties.containsKey(REFRESH_INTERVAL_KEY)) {
-        String propValue = originalProperties.getProperty(REFRESH_INTERVAL_KEY);
-        try {
-          refreshInterval = Integer.parseInt(propValue);
-          if (refreshInterval < 0 || refreshInterval > MAX_REFRESH_INTERVAL) {
-            LOGGER.warning("Provided yb-servers-refresh-interval ("
-                + refreshInterval + ") is outside the permissible range,"
-                + " setting it to 300 seconds");
-            refreshInterval = DEFAULT_REFRESH_INTERVAL;
-          } else {
-            refreshIntervalSpecified = true;
-          }
-        } catch (NumberFormatException nfe) {
-          LOGGER.warning("Provided yb-servers-refresh-interval ("
-              + refreshInterval + ") is invalid, setting it to 300 seconds");
-          refreshInterval = DEFAULT_REFRESH_INTERVAL;
-        }
+        refreshInterval = parseAndGetValue(originalProperties.getProperty(REFRESH_INTERVAL_KEY),
+            DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
       }
       if (originalProperties.containsKey(EXPLICIT_FALLBACK_ONLY_KEY)) {
         String propValue = originalProperties.getProperty(EXPLICIT_FALLBACK_ONLY_KEY);
@@ -219,20 +186,27 @@ public class LoadBalanceProperties {
         }
       }
       if (originalProperties.containsKey(FAILED_HOST_RECONNECT_DELAY_SECS_KEY)) {
-        String propValue = originalProperties.getProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY);
-        try {
-          failedHostReconnectDelaySecs = Integer.parseInt(propValue);
-          if (failedHostReconnectDelaySecs < 0 || failedHostReconnectDelaySecs > MAX_FAILED_HOST_RECONNECT_DELAY_SECS) {
-            failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
-          } else {
-            failedHostReconnectDelaySpecified = true;
-          }
-        } catch (NumberFormatException nfe) {
-          failedHostReconnectDelaySecs = DEFAULT_FAILED_HOST_TTL_SECONDS;
-        }
+        failedHostReconnectDelaySecs =
+            parseAndGetValue(originalProperties.getProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY),
+                DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS);
       }
     }
     return sb.toString();
+  }
+
+  private int parseAndGetValue(String propValue, int defaultValue, int maxValue) {
+    try {
+      int value = Integer.parseInt(propValue);
+      if (value < 0 || value > maxValue) {
+        LOGGER.warning("Provided value (" + value + ") is outside the permissible range,"
+            + " using the default value instead");
+        return defaultValue;
+      }
+      return value;
+    } catch (NumberFormatException nfe) {
+      LOGGER.warning("Provided value (" + propValue + ") is invalid, using the default value instead");
+      return defaultValue;
+    }
   }
 
   public String getOriginalURL() {
@@ -304,6 +278,15 @@ public class LoadBalanceProperties {
     public LoadBalancerKey(String url, Properties properties) {
       this.url = url;
       this.properties = properties;
+    }
+
+    @Override
+    public int hashCode() {
+      final int prime = 31;
+      int result = 1;
+      result = prime * result + ((url == null) ? 0 : url.hashCode());
+      result = prime * result + ((properties == null) ? 0 : properties.hashCode());
+      return result;
     }
 
     public boolean equals(Object other) {
