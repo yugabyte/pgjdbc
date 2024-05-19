@@ -46,6 +46,18 @@ public class LoadBalanceManager {
     }
   }
 
+  /**
+   * FOR TEST PURPOSE ONLY
+   */
+  public static synchronized void clear() {
+    LOGGER.warning("Clearing LoadBalanceManager state for testing purposes.");
+    clusterInfoMap.clear();
+    controlConnection = null;
+    lastRefreshTime = 0;
+    forceRefreshOnce = false;
+    useHostColumn = null;
+  }
+
   public static long getLastRefreshTime() {
     return lastRefreshTime;
   }
@@ -231,7 +243,7 @@ public class LoadBalanceManager {
         properties);
     // Cleanup extra properties used for load balancing?
     if (lbProperties.hasLoadBalance()) {
-      Connection conn = getConnection(lbProperties,  user, database);
+      Connection conn = getConnection(lbProperties, properties, user, database);
       if (conn != null) {
         return conn;
       }
@@ -240,14 +252,13 @@ public class LoadBalanceManager {
     return null;
   }
 
-  public static Connection getConnection(LoadBalanceProperties loadBalanceProperties, String user,
-      String dbName) {
+  public static Connection getConnection(LoadBalanceProperties loadBalanceProperties,
+      Properties props, String user, String dbName) {
     LoadBalancer lb = loadBalanceProperties.getAppropriateLoadBalancer();
-    Properties props = loadBalanceProperties.getOriginalProperties();
     String url = loadBalanceProperties.getStrippedURL();
 
     if (!checkAndRefresh(loadBalanceProperties, lb, user, dbName)) {
-      LOGGER.fine("checkAndRefresh() returns false");
+      LOGGER.fine("Attempt to refresh info from yb_servers() failed");
       return null;
     }
 
@@ -292,6 +303,14 @@ public class LoadBalanceManager {
     return null;
   }
 
+  /**
+   *
+   * @param loadBalanceProperties
+   * @param lb LoadBalancer instance
+   * @param user
+   * @param dbName
+   * @return true if the refresh was not required or if it was successful.
+   */
   private static synchronized boolean checkAndRefresh(LoadBalanceProperties loadBalanceProperties,
       LoadBalancer lb, String user, String dbName) {
     if (needsRefresh(lb.getRefreshListSeconds())) {
@@ -317,26 +336,31 @@ public class LoadBalanceManager {
         } catch (SQLException ex) {
           if (refreshFailed) {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
-          } else {
-            LOGGER.fine("Exception while creating control connection to "
-                + hspec[0].getHost() + ": " + ex + ", " + ex.getSQLState());
-          }
-          if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
-            LOGGER.warning("Received error UNDEFINED_FUNCTION (42883)");
-            return false;
-          }
-          if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
-            LOGGER.warning("Received error CONNECTION_UNABLE_TO_CONNECT for " + hspec[0].getHost());
-            for (HostSpec h : hspec) {
-              markAsFailed(h.getHost());
+            String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
+            markAsFailed(failed);
+            if (hspec.length > 1) {
+              HostSpec[] newHspec = new HostSpec[hspec.length - 1];
+              for (int i = 0, j = 0; i < hspec.length; i++) {
+                if (!failed.equalsIgnoreCase(hspec[i].getHost())) {
+                  newHspec[j] = hspec[i];
+                  j++;
+                }
+              }
+              hspec = newHspec;
             }
-          }
-          // Remove hspec only if exception not thrown from refresh() above
-          // Since it could be a stale connection
-          if (!refreshFailed) {
+          } else {
+            String msg = hspec.length > 1 ? " and others" : "";
+            LOGGER.fine("Exception while creating control connection to "
+                + hspec[0].getHost() + msg + ": " + ex + ", " + ex.getSQLState());
             for (HostSpec h : hspec) {
               hosts.remove(h.getHost());
             }
+          }
+          if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
+            LOGGER.warning("Received UNDEFINED_FUNCTION for yb_servers()" +
+                " (SQLState=42883). You may be using an older version of" +
+                " YugabyteDB, consider upgrading it.");
+            return false;
           }
           // Retry until servers are available
           if (hosts.isEmpty()) {

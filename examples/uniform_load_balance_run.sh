@@ -80,7 +80,7 @@ $INSTALL_DIR/bin/yb-ctl destroy  > yb-ctl.log 2>&1
 
 echo "Creating a 3-node, RF-3 cluster (live nodes: 1,2,3)"
 $INSTALL_DIR/bin/yb-ctl create --rf 3  >> yb-ctl.log 2>&1
-SLEEP 5
+SLEEP 5 # Allow some time for the cluster to be ready
 
 #deleting the checker file if exists
 verbosePrint $VERBOSE "Deleting all the temporary checker files if exists"
@@ -106,7 +106,7 @@ interact $INTERACTIVE
 
 echoSleep "Adding Node-4 to the cluster (live nodes: 1,2,3,4)"
 $INSTALL_DIR/bin/yb-ctl add_node >> yb-ctl.log 2>&1
-SLEEP 5
+SLEEP 5 # Allow some time for the node to be ready
 
 touch .jdbc_example_app_checker   #resuming the java app
 
