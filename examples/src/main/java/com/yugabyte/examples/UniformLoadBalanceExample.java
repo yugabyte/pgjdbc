@@ -13,7 +13,7 @@
 
 package com.yugabyte.examples;
 
-import com.yugabyte.ysql.ClusterAwareLoadBalancer;
+import com.yugabyte.ysql.LoadBalanceService;
 import com.yugabyte.ysql.LoadBalanceProperties;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -42,12 +42,11 @@ public class UniformLoadBalanceExample {
     String controlHost = "127.0.0.1";
     String controlPort = "5433";
 
+    controlUrl = "jdbc:yugabytedb://" + controlHost + ":" + controlPort
+        + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true"
+        + "&yb-servers-refresh-interval=0";
     if (debugLogging) {
-      controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&loggerLevel=debug";
-    } else {
-      controlUrl = "jdbc:yugabytedb://" + controlHost
-        + ":" + controlPort + "/yugabyte?user=yugabyte&password=yugabyte&load-balance=true";
+      controlUrl = controlUrl + "&loggerLevel=debug";
     }
 
     System.out.println("Setting up the connection pool having 6 connections.......");
@@ -63,7 +62,6 @@ public class UniformLoadBalanceExample {
 
       //This is just for demo purpose because right now default time for refresh is 5min
       //and we don't want the user to wait that much in this app
-      ClusterAwareLoadBalancer.forceRefresh = true;
 
       Properties poolProperties = new Properties();
       if (debugLogging) {
@@ -84,6 +82,7 @@ public class UniformLoadBalanceExample {
       if (!lbpropvalue.equals("true")) {
         poolProperties.setProperty("dataSource.topologyKeys", lookupKey);
       }
+      poolProperties.setProperty("dataSource.ybServersRefreshInterval", "0");
 
       HikariConfig hikariConfig = new HikariConfig(poolProperties);
       hikariConfig.validate();
@@ -100,7 +99,7 @@ public class UniformLoadBalanceExample {
       // This is an internal map for debugging which keeps a map of
       // "server -> num_connections"
       // made by the driver in this application
-      LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(lookupKey).printHostToConnMap();
+      LoadBalanceService.printHostToConnectionMap();
       System.out.println();
 
       if (interactive) {
@@ -117,7 +116,7 @@ public class UniformLoadBalanceExample {
       makeSomeNewConnections(7);
 
       // Printing the current load from internal accounting map
-      LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(lookupKey).printHostToConnMap();
+      LoadBalanceService.printHostToConnectionMap();
       System.out.println();
 
       if (interactive) {
@@ -134,7 +133,7 @@ public class UniformLoadBalanceExample {
       makeSomeNewConnections(4);
 
       // Printing the current load from internal accounting map
-      LoadBalanceProperties.CONNECTION_MANAGER_MAP.get(lookupKey).printHostToConnMap();
+      LoadBalanceService.printHostToConnectionMap();
       System.out.println();
 
       if (interactive) {

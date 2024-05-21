@@ -44,4 +44,8 @@ public class YBClusterAwareDataSource extends PGSimpleDataSource {
   public String getAdditionalEndPoints() {
     return additionalEndPoints;
   }
+
+  public String getDescription() {
+    return "YB cluster-aware DataSource from YugabyteDB JDBC Driver (YSQL)";
+  }
 }
