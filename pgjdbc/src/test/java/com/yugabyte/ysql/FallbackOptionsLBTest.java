@@ -1,9 +1,6 @@
-package com.yugabyte;
+package com.yugabyte.ysql;
 
 import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
-
-import com.yugabyte.ysql.LoadBalanceManager;
-import com.yugabyte.ysql.LoadBalanceProperties;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -71,7 +68,7 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:", null);
     } finally {
       CONNECTION_MANAGER_MAP.clear();
-      LoadBalanceManager.clear();
+      LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -108,7 +105,7 @@ public class FallbackOptionsLBTest {
           "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 12+1, 0, 0));
     } finally {
       CONNECTION_MANAGER_MAP.clear();
-      LoadBalanceManager.clear();
+      LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -163,7 +160,7 @@ public class FallbackOptionsLBTest {
 
     } finally {
       CONNECTION_MANAGER_MAP.clear();
-      LoadBalanceManager.clear();
+      LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -315,7 +312,7 @@ public class FallbackOptionsLBTest {
       if ("skip".equals(multipurposeParam)) {
         return;
       }
-      int recorded = LoadBalanceManager.getLoad(server);
+      int recorded = LoadBalanceService.getLoad(server);
       if (server.equalsIgnoreCase(multipurposeParam)) {
         // Account for control connection
         expectedCount -= 1;

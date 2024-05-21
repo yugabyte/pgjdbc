@@ -52,14 +52,14 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   }
 
   @Override
-  public boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e) {
+  public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e) {
     return !attempted.contains(e.getKey()) && !e.getValue().isDown();
   }
 
     public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts) {
     LOGGER.fine("failedHosts: " + failedHosts);
     attempted = failedHosts;
-    ArrayList<String> hosts = LoadBalanceManager.getAllEligibleHosts(this);
+    ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this);
 
     int min = Integer.MAX_VALUE;
     ArrayList<String> minConnectionsHostList = new ArrayList<>();
@@ -68,7 +68,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
         LOGGER.fine("Skipping failed host " + h);
         continue;
       }
-      int currLoad = LoadBalanceManager.getLoad(h);
+      int currLoad = LoadBalanceService.getLoad(h);
       LOGGER.fine("Number of connections to " + h + ": " + currLoad);
       if (currLoad < min) {
         min = currLoad;
@@ -85,7 +85,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       chosenHost = minConnectionsHostList.get(idx);
     }
     if (chosenHost != null) {
-      LoadBalanceManager.incrementConnectionCount(chosenHost);
+      LoadBalanceService.incrementConnectionCount(chosenHost);
     }
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
     return chosenHost;

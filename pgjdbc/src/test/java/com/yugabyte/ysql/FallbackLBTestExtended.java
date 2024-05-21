@@ -1,11 +1,9 @@
-package com.yugabyte;
+package com.yugabyte.ysql;
 
-import com.yugabyte.ysql.LoadBalanceManager;
-
-import static com.yugabyte.FallbackOptionsLBTest.executeCmd;
-import static com.yugabyte.FallbackOptionsLBTest.expectedInput;
-import static com.yugabyte.FallbackOptionsLBTest.startYBDBClusterWithNineNodes;
-import static com.yugabyte.FallbackOptionsLBTest.verifyOn;
+import static com.yugabyte.ysql.FallbackOptionsLBTest.executeCmd;
+import static com.yugabyte.ysql.FallbackOptionsLBTest.expectedInput;
+import static com.yugabyte.ysql.FallbackOptionsLBTest.startYBDBClusterWithNineNodes;
+import static com.yugabyte.ysql.FallbackOptionsLBTest.verifyOn;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -113,7 +111,7 @@ public class FallbackLBTestExtended {
       close(connections6);
       close(connections7);
     } finally {
-      LoadBalanceManager.clear();
+      LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -167,7 +165,7 @@ public class FallbackLBTestExtended {
       close(connections2);
       close(connections3);
     } finally {
-      LoadBalanceManager.clear();
+      LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }

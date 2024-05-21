@@ -25,12 +25,12 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-public class LoadBalanceManager {
+public class LoadBalanceService {
 
   private static ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
   private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
-  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceManager.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static long lastRefreshTime;
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
@@ -49,8 +49,8 @@ public class LoadBalanceManager {
   /**
    * FOR TEST PURPOSE ONLY
    */
-  public static synchronized void clear() {
-    LOGGER.warning("Clearing LoadBalanceManager state for testing purposes.");
+  static synchronized void clear() {
+    LOGGER.warning("Clearing LoadBalanceService state for testing purposes");
     clusterInfoMap.clear();
     controlConnection = null;
     lastRefreshTime = 0;
@@ -58,11 +58,11 @@ public class LoadBalanceManager {
     useHostColumn = null;
   }
 
-  public static long getLastRefreshTime() {
+  static long getLastRefreshTime() {
     return lastRefreshTime;
   }
 
-  public static boolean needsRefresh(long refreshInterval) {
+  private static boolean needsRefresh(long refreshInterval) {
     if (forceRefreshOnce) {
       LOGGER.fine("forceRefreshOnce is set to true");
       return true;
@@ -157,7 +157,7 @@ public class LoadBalanceManager {
     return true;
   }
 
-  public static void markAsFailed(String host) {
+  private static void markAsFailed(String host) {
     NodeInfo info = clusterInfoMap.get(host);
     if (info == null) {
       return; // unexpected
@@ -171,12 +171,12 @@ public class LoadBalanceManager {
     }
   }
 
-  public static int getLoad(String host) {
+  static int getLoad(String host) {
     NodeInfo info = clusterInfoMap.get(host);
     return info == null ? 0 : info.connectionCount;
   }
 
-  public static ArrayList<String> getAllEligibleHosts(LoadBalancer policy) {
+  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy) {
     ArrayList<String> list = new ArrayList<>();
     Set<Map.Entry<String, NodeInfo>> set = clusterInfoMap.entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
@@ -189,7 +189,7 @@ public class LoadBalanceManager {
     return list;
   }
 
-  public static ArrayList<String> getAllAvailableHosts(ArrayList<String> attempted) {
+  private static ArrayList<String> getAllAvailableHosts(ArrayList<String> attempted) {
     ArrayList<String> list = new ArrayList<>();
     Enumeration<String> hosts = clusterInfoMap.keys();
     while (hosts.hasMoreElements()) {
@@ -201,12 +201,12 @@ public class LoadBalanceManager {
     return list;
   }
 
-  public static int getPort(String host) {
+  private static int getPort(String host) {
     NodeInfo info = clusterInfoMap.get(host);
     return info != null ? info.port : 5433;
   }
 
-  public static boolean incrementConnectionCount(String host) {
+  static boolean incrementConnectionCount(String host) {
     NodeInfo info = clusterInfoMap.get(host);
     if (info != null) {
       synchronized (info) {
@@ -254,7 +254,7 @@ public class LoadBalanceManager {
     return null;
   }
 
-  public static Connection getConnection(LoadBalanceProperties loadBalanceProperties,
+  private static Connection getConnection(LoadBalanceProperties loadBalanceProperties,
       Properties props, String user, String dbName) {
     LoadBalancer lb = loadBalanceProperties.getAppropriateLoadBalancer();
     String url = loadBalanceProperties.getStrippedURL();
@@ -271,7 +271,7 @@ public class LoadBalanceManager {
     while (chosenHost != null) {
       try {
         props.setProperty("PGHOST", chosenHost);
-        props.setProperty("PGPORT", String.valueOf(LoadBalanceManager.getPort(chosenHost)));
+        props.setProperty("PGPORT", String.valueOf(getPort(chosenHost)));
         newConnection = new PgConnection(hostSpecs(props), user, dbName, props, url);
         newConnection.setLoadBalancer(lb);
         LOGGER.fine("Created connection to " + chosenHost);
@@ -280,13 +280,13 @@ public class LoadBalanceManager {
         // Let the refresh be forced the next time it is tried. todo Is this needed?
         forceRefreshOnce = true;
         failedHosts.add(chosenHost);
-        LoadBalanceManager.decrementConnectionCount(chosenHost);
+        decrementConnectionCount(chosenHost);
         if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
           if (firstException == null) {
             firstException = ex;
           }
           LOGGER.fine("couldn't connect to " + chosenHost + ", adding it to failed host list");
-          LoadBalanceManager.markAsFailed(chosenHost);
+          markAsFailed(chosenHost);
         } else {
           // Log the exception. Consider other failures as temporary and not as serious as
           // PSQLState.CONNECTION_UNABLE_TO_CONNECT. So for other failures it will be ignored
@@ -296,7 +296,7 @@ public class LoadBalanceManager {
         }
       } catch (Throwable e) {
         LOGGER.fine("Received Throwable: " + e);
-        LoadBalanceManager.decrementConnectionCount(chosenHost);
+        decrementConnectionCount(chosenHost);
         throw e;
       }
       chosenHost = lb.getLeastLoadedServer(false, failedHosts);
@@ -361,7 +361,7 @@ public class LoadBalanceManager {
           } else if (!refreshFailed) {
             // Try the first host in the list (don't have to check least loaded one since it's
             // just for the control connection)
-            HostSpec hs = new HostSpec(hosts.get(0), LoadBalanceManager.getPort(hosts.get(0)),
+            HostSpec hs = new HostSpec(hosts.get(0), getPort(hosts.get(0)),
                 loadBalanceProperties.getOriginalProperties().getProperty("localSocketAddress"));
             hspec = new HostSpec[]{hs};
           }
@@ -372,7 +372,7 @@ public class LoadBalanceManager {
     return true;
   }
 
-  public static InetAddress getConnectedInetAddress(Connection conn) throws SQLException {
+  private static InetAddress getConnectedInetAddress(Connection conn) throws SQLException {
     String hostConnectedTo = ((PgConnection) conn).getQueryExecutor().getHostSpec().getHost();
     InetAddress hostConnectedInetAddr;
 

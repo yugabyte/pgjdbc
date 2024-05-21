@@ -1,6 +1,6 @@
-package com.yugabyte;
+package com.yugabyte.ysql;
 
-import static com.yugabyte.FallbackOptionsLBTest.*;
+import static com.yugabyte.ysql.FallbackOptionsLBTest.*;
 import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
 
 import com.yugabyte.ysql.LoadBalanceProperties;

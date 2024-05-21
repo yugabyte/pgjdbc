@@ -57,7 +57,7 @@ import org.postgresql.xml.DefaultPGXmlFactoryFactory;
 import org.postgresql.xml.LegacyInsecurePGXmlFactoryFactory;
 import org.postgresql.xml.PGXmlFactoryFactory;
 
-import com.yugabyte.ysql.LoadBalanceManager;
+import com.yugabyte.ysql.LoadBalanceService;
 import com.yugabyte.ysql.LoadBalancer;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.nullness.qual.PolyNull;
@@ -773,7 +773,7 @@ public class PgConnection implements BaseConnection {
     openStackTrace = null;
     String host = queryExecutor.getHostSpec().getHost();
     if (loadBalancer != null && host != null) {
-      LoadBalanceManager.decrementConnectionCount(host);
+      LoadBalanceService.decrementConnectionCount(host);
     }
   }
 
