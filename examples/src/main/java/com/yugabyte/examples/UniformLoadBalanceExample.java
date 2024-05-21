@@ -13,7 +13,7 @@
 
 package com.yugabyte.examples;
 
-import com.yugabyte.ysql.LoadBalanceManager;
+import com.yugabyte.ysql.LoadBalanceService;
 import com.yugabyte.ysql.LoadBalanceProperties;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -99,7 +99,7 @@ public class UniformLoadBalanceExample {
       // This is an internal map for debugging which keeps a map of
       // "server -> num_connections"
       // made by the driver in this application
-      LoadBalanceManager.printHostToConnectionMap();
+      LoadBalanceService.printHostToConnectionMap();
       System.out.println();
 
       if (interactive) {
@@ -116,7 +116,7 @@ public class UniformLoadBalanceExample {
       makeSomeNewConnections(7);
 
       // Printing the current load from internal accounting map
-      LoadBalanceManager.printHostToConnectionMap();
+      LoadBalanceService.printHostToConnectionMap();
       System.out.println();
 
       if (interactive) {
@@ -133,7 +133,7 @@ public class UniformLoadBalanceExample {
       makeSomeNewConnections(4);
 
       // Printing the current load from internal accounting map
-      LoadBalanceManager.printHostToConnectionMap();
+      LoadBalanceService.printHostToConnectionMap();
       System.out.println();
 
       if (interactive) {

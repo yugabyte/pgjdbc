@@ -40,7 +40,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   /**
    * Derived from the placements value above.
    */
-  private final Map<Integer, Set<LoadBalanceManager.CloudPlacement>> allowedPlacements = new HashMap<>();
+  private final Map<Integer, Set<LoadBalanceService.CloudPlacement>> allowedPlacements = new HashMap<>();
   private final int PRIMARY_PLACEMENTS_INDEX = 1;
   private final int REST_OF_CLUSTER_INDEX = -1;
   /**
@@ -64,7 +64,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   }
 
   private void populatePlacementSet(String placement,
-      Set<LoadBalanceManager.CloudPlacement> allowedPlacements) {
+      Set<LoadBalanceService.CloudPlacement> allowedPlacements) {
     String[] placementParts = placement.split("\\.");
     if (placementParts.length != 3 || placementParts[0].equals("*") || placementParts[1].equals(
         "*")) {
@@ -74,7 +74,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       throw new IllegalArgumentException("Malformed " + TOPOLOGY_AWARE_PROPERTY_KEY
           + " property value: " + placement);
     }
-    LoadBalanceManager.CloudPlacement cp = new LoadBalanceManager.CloudPlacement(
+    LoadBalanceService.CloudPlacement cp = new LoadBalanceService.CloudPlacement(
         placementParts[0], placementParts[1], placementParts[2]);
     LOGGER.fine("Adding placement " + cp + " to allowed " + "list");
     allowedPlacements.add(cp);
@@ -88,13 +88,13 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         throw new IllegalArgumentException("Invalid value part for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
       }
       if (v.length == 1) {
-        Set<LoadBalanceManager.CloudPlacement> primary =
+        Set<LoadBalanceService.CloudPlacement> primary =
             allowedPlacements.computeIfAbsent(PRIMARY_PLACEMENTS_INDEX, k -> new HashSet<>());
         populatePlacementSet(v[0], primary);
       } else {
         int pref = Integer.valueOf(v[1]);
         if (pref > 0 && pref <= MAX_PREFERENCE_VALUE) {
-          Set<LoadBalanceManager.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref, k -> new HashSet<>());
+          Set<LoadBalanceService.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref, k -> new HashSet<>());
           populatePlacementSet(v[0], cpSet);
         } else {
           throw new IllegalArgumentException("Invalid preference value for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
@@ -113,8 +113,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   }
 
   @Override
-  public boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e) {
-    Set<LoadBalanceManager.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
+  public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e) {
+    Set<LoadBalanceService.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
     boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX && !explicitFallbackOnly)
         || (set != null && e.getValue().getPlacement().isContainedIn(set));
     boolean isAttempted = attempted.contains(e.getKey());
@@ -130,7 +130,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts);
     // Reset currentPlacementIndex if it's a new request AND refresh() happened after the
     // last request was processed
-    if (newRequest && (LoadBalanceManager.getLastRefreshTime() - lastRequestTime >= 0)) {
+    if (newRequest && (LoadBalanceService.getLastRefreshTime() - lastRequestTime >= 0)) {
       currentPlacementIndex = PRIMARY_PLACEMENTS_INDEX;
     } else {
       LOGGER.fine("Placements: [" + placements
@@ -141,7 +141,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     String chosenHost = null;
     while (chosenHost == null && currentPlacementIndex <= MAX_PREFERENCE_VALUE) {
       attempted = failedHosts;
-      hosts = LoadBalanceManager.getAllEligibleHosts(this);
+      hosts = LoadBalanceService.getAllEligibleHosts(this);
 
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
@@ -150,7 +150,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
           LOGGER.fine("Skipping failed host " + h);
           continue;
         }
-        int currLoad = LoadBalanceManager.getLoad(h);
+        int currLoad = LoadBalanceService.getLoad(h);
         LOGGER.fine("Number of connections to " + h + ": " + currLoad);
         if (currLoad < min) {
           min = currLoad;
@@ -166,7 +166,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         chosenHost = minConnectionsHostList.get(idx);
       }
       if (chosenHost != null) {
-        LoadBalanceManager.incrementConnectionCount(chosenHost);
+        LoadBalanceService.incrementConnectionCount(chosenHost);
       } else {
         LOGGER.fine("chosenHost is null for placement level " + currentPlacementIndex
             + ", allowedPlacements: " + allowedPlacements);

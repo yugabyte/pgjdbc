@@ -52,7 +52,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   }
 
   @Override
-  public boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e) {
+  public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e) {
     return !attempted.contains(e.getKey()) && !e.getValue().isDown();
   }
 
@@ -69,7 +69,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
         LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost +")");
         continue;
       }
-      int currLoad = LoadBalanceManager.getLoad(h);
+      int currLoad = LoadBalanceService.getLoad(h);
       LOGGER.fine("Number of connections to " + h + ": " + currLoad);
       if (currLoad < min) {
         min = currLoad;
@@ -86,7 +86,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       chosenHost = minConnectionsHostList.get(idx);
     }
     if (chosenHost != null) {
-      LoadBalanceManager.incrementConnectionCount(chosenHost);
+      LoadBalanceService.incrementConnectionCount(chosenHost);
     }
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
     return chosenHost;

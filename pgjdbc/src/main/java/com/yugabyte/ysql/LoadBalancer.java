@@ -4,20 +4,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * An interface for any load balancing policy to implement. The LoadBalanceManager invokes the
+ * An interface for any load balancing policy to implement. The LoadBalanceService invokes the
  * implemented methods while processing a new connection request.
  *
- * @see LoadBalanceManager
+ * @see LoadBalanceService
  * @see ClusterAwareLoadBalancer
  * @see TopologyAwareLoadBalancer
  */
 public interface LoadBalancer {
 
   /**
-   * @param e The {@link com.yugabyte.ysql.LoadBalanceManager.NodeInfo} object for the host
+   * @param e The {@link LoadBalanceService.NodeInfo} object for the host
    * @return true, if a host is eligible to be considered for a connection request
    */
-  boolean isHostEligible(Map.Entry<String, LoadBalanceManager.NodeInfo> e);
+  boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e);
 
   /**
    * @param newRequest  whether this invocation is first for a new connection request

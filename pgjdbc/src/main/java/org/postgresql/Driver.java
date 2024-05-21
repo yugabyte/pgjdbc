@@ -37,7 +37,7 @@ import org.postgresql.util.PSQLState;
 import org.postgresql.util.SharedTimer;
 import org.postgresql.util.URLCoder;
 
-import com.yugabyte.ysql.LoadBalanceManager;
+import com.yugabyte.ysql.LoadBalanceService;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.IOException;
@@ -510,7 +510,7 @@ public class Driver implements java.sql.Driver {
    */
   private static Connection makeConnection(String url, Properties properties,
       LoadBalanceProperties lbprops, ArrayList<String> timedOutHosts) throws SQLException {
-    Connection connection = LoadBalanceManager.getConnection(url, properties, user(properties),
+    Connection connection = LoadBalanceService.getConnection(url, properties, user(properties),
         database(properties)); // todo pass timedOutHosts
     if (connection != null) {
       return connection;
