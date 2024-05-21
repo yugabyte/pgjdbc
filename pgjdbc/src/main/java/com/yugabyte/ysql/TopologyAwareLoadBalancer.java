@@ -30,7 +30,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 public class TopologyAwareLoadBalancer implements LoadBalancer {
-  protected static final Logger LOGGER = Logger.getLogger(TopologyAwareLoadBalancer.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + TopologyAwareLoadBalancer.class.getName());
   /**
    * Holds the value of topology-keys specified.
    */

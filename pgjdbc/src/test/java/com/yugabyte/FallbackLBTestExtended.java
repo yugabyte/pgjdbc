@@ -1,22 +1,26 @@
 package com.yugabyte;
 
+import com.yugabyte.ysql.LoadBalanceManager;
+
 import static com.yugabyte.FallbackOptionsLBTest.executeCmd;
 import static com.yugabyte.FallbackOptionsLBTest.expectedInput;
 import static com.yugabyte.FallbackOptionsLBTest.startYBDBClusterWithNineNodes;
 import static com.yugabyte.FallbackOptionsLBTest.verifyOn;
 
-import com.yugabyte.ysql.LoadBalanceProperties;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.Properties;
 
 public class FallbackLBTestExtended {
   private static int numConnections = 18;
   private static final String path = System.getenv("YBDB_PATH");
-  private static String baseUrl = "jdbc:yugabytedb://localhost:5433/yugabyte?load-balance=true&"
-      + LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY + "=";
+  private static String baseUrl = "jdbc:yugabytedb://127.0.0.1:5433,127.0.0.4:5433,127.0.0.7:5433/yugabyte";
+  private static Properties props = new Properties();
+  private static boolean useProperties = false;
+
 
   public static void main(String[] args) throws SQLException, ClassNotFoundException {
     if (path == null || path.trim().isEmpty()) {
@@ -26,7 +30,13 @@ public class FallbackLBTestExtended {
 
     System.out.println("Running CheckMultiNodeDown() ....");
     checkMultiNodeDown();
+    System.out.println("Running checkMultiNodeDown(with properties) ...");
+    useProperties = true;
+    checkMultiNodeDown();
     System.out.println("Running checkNodeDownPrimary() ....");
+    checkNodeDownPrimary();
+    System.out.println("Running checkNodeDownPrimary(with url) ...");
+    useProperties = false;
     checkNodeDownPrimary();
   }
 
@@ -41,6 +51,14 @@ public class FallbackLBTestExtended {
         ".7:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=0&topology-keys=";
     String tk = "aws.us-west.*:1,aws.us-east.*:2,aws.eu-west.*:3,aws.eu-north.*:4";
     String controlHost = "127.0.0.1";
+    if (useProperties) {
+      props.clear();
+      props.setProperty("user", "yugabyte");
+      props.setProperty("password", "yugabyte");
+      props.setProperty("load-balance", "true");
+      props.setProperty("yb-servers-refresh-interval", "0");
+      props.setProperty("topology-keys", tk);
+    }
 
     try {
       Connection[] connections1 = new Connection[numConnections];
@@ -87,11 +105,28 @@ public class FallbackLBTestExtended {
       Connection[] connections7 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url+tk, controlHost, connections7, expectedInput(-1, -1, -1, -1, -1, 63+1, -1, -1, -1));
 
+      close(connections1);
+      close(connections2);
+      close(connections3);
+      close(connections4);
+      close(connections5);
+      close(connections6);
+      close(connections7);
     } finally {
+      LoadBalanceManager.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
 
+  private static void close(Connection[] conns) {
+    Arrays.stream(conns).forEach(c -> {
+      try {
+        c.close();
+      } catch (SQLException e) {
+        System.out.println("Error closing connection: " + e);
+      }
+    });
+  }
   private static void checkNodeDownPrimary() throws SQLException {
 
     executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
@@ -100,6 +135,15 @@ public class FallbackLBTestExtended {
 
     String url = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?load-balance=true&yb-servers-refresh-interval=0&topology-keys=";
     String tk = "aws.us-west.*:1";
+    if (useProperties) {
+      props.clear();
+      baseUrl = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte";
+      props.setProperty("user", "yugabyte");
+      props.setProperty("password", "yugabyte");
+      props.setProperty("load-balance", "true");
+      props.setProperty("yb-servers-refresh-interval", "0");
+      props.setProperty("topology-keys", tk);
+    }
 
     try {
       Connection[] connections1 = new Connection[numConnections];
@@ -119,7 +163,11 @@ public class FallbackLBTestExtended {
       Connection[] connections3 = new Connection[numConnections];
       createConnectionsWithoutCloseAndVerify(url+tk, "127.0.0.3", connections3, expectedInput(16, 16, 16+1));
 
+      close(connections1);
+      close(connections2);
+      close(connections3);
     } finally {
+      LoadBalanceManager.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
   }
@@ -127,7 +175,11 @@ public class FallbackLBTestExtended {
   private static void createConnectionsWithoutCloseAndVerify(String url, String controlHost,
       Connection[] connections, Map<String, Integer> counts) throws SQLException {
     for (int i = 0; i < numConnections; i++) {
-      connections[i] = DriverManager.getConnection(url, "yugabyte", "yugabyte");
+      if (useProperties) {
+        connections[i] = DriverManager.getConnection(baseUrl, props);
+      } else {
+        connections[i] = DriverManager.getConnection(url, "yugabyte", "yugabyte");
+      }
     }
     System.out.println("Created " + numConnections + " connections");
 

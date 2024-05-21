@@ -30,7 +30,7 @@ public class LoadBalanceManager {
   private static ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
   private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
-  protected static final Logger LOGGER = Logger.getLogger(LoadBalanceManager.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceManager.class.getName());
   private static long lastRefreshTime;
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
@@ -248,6 +248,8 @@ public class LoadBalanceManager {
         return conn;
       }
       LOGGER.warning("Failed to apply load balance. Trying normal connection");
+      properties.setProperty("PGHOST", lbProperties.getOriginalProperties().getProperty("PGHOST"));
+      properties.setProperty("PGPORT", lbProperties.getOriginalProperties().getProperty("PGPORT"));
     }
     return null;
   }
@@ -338,16 +340,6 @@ public class LoadBalanceManager {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
             String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(failed);
-            if (hspec.length > 1) {
-              HostSpec[] newHspec = new HostSpec[hspec.length - 1];
-              for (int i = 0, j = 0; i < hspec.length; i++) {
-                if (!failed.equalsIgnoreCase(hspec[i].getHost())) {
-                  newHspec[j] = hspec[i];
-                  j++;
-                }
-              }
-              hspec = newHspec;
-            }
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
             LOGGER.fine("Exception while creating control connection to "
