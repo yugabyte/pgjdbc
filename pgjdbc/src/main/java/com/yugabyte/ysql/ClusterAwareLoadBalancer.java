@@ -20,7 +20,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 public class ClusterAwareLoadBalancer implements LoadBalancer {
-  protected static final Logger LOGGER = Logger.getLogger(ClusterAwareLoadBalancer.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
 
   private static volatile ClusterAwareLoadBalancer instance;
   List<String> attempted = new ArrayList<>();

@@ -53,7 +53,7 @@ public class LoadBalanceProperties {
   public static final int MAX_REFRESH_INTERVAL = 600;
   public static final int MAX_FAILED_HOST_RECONNECT_DELAY_SECS = 60;
 
-  private static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
+  private static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceProperties.class.getName());
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
    load-balance 'simple' to be used as KEY and for targeted topologies,
     <placements> value specified will be used as key
@@ -176,10 +176,12 @@ public class LoadBalanceProperties {
         placements = propValue;
       }
       if (originalProperties.containsKey(REFRESH_INTERVAL_KEY)) {
+        refreshIntervalSpecified = true;
         refreshInterval = parseAndGetValue(originalProperties.getProperty(REFRESH_INTERVAL_KEY),
             DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
       }
       if (originalProperties.containsKey(EXPLICIT_FALLBACK_ONLY_KEY)) {
+        failedHostReconnectDelaySpecified = true;
         String propValue = originalProperties.getProperty(EXPLICIT_FALLBACK_ONLY_KEY);
         if (propValue.equalsIgnoreCase("true")) {
           explicitFallbackOnly = true;

@@ -173,6 +173,10 @@ public class FallbackOptionsLBTest {
 
     executeCmd(path + "/bin/yb-ctl --rf 3 start --placement_info \"aws.us-west.us-west-1a\" ",
         "Start YugabyteDB rf=3 cluster", 15);
+    try {
+      Thread.sleep(5000);
+    } catch (InterruptedException ie) {
+    }
     executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",
         "Add a node", 10);
     executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",
@@ -237,7 +241,9 @@ public class FallbackOptionsLBTest {
       process.waitFor(timeout, TimeUnit.SECONDS);
       int exitCode = process.exitValue();
       if (exitCode != 0) {
-        throw new RuntimeException(msg + ": FAILED");
+        String result = new BufferedReader(new InputStreamReader(process.getInputStream()))
+            .lines().collect(Collectors.joining("\n"));
+        throw new RuntimeException(msg + ": FAILED" + "\n" + result);
       }
       System.out.println(msg + ": SUCCEEDED!");
     } catch (Exception e) {
@@ -294,7 +300,9 @@ public class FallbackOptionsLBTest {
       process.waitFor(10, TimeUnit.SECONDS);
       int exitCode = process.exitValue();
       if (exitCode != 0) {
-        throw new RuntimeException("Could not access /rpcz on " + server);
+        String out = new BufferedReader(new InputStreamReader(process.getInputStream()))
+            .lines().collect(Collectors.joining("\n"));
+        throw new RuntimeException("Could not access /rpcz on " + server + "\n" + out);
       }
       String[] count = result.split("client backend");
       System.out.print(server + " = " + (count.length - 1));
