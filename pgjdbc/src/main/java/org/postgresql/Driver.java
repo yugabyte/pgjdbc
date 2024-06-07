@@ -291,8 +291,6 @@ public class Driver implements java.sql.Driver {
 
       ConnectThread ct;
       ArrayList<String> prevTimedOutServers = new ArrayList<>();
-      // TODO create a connection property for this.
-      boolean retryNextServerOnLoginTimeout = true;
       int maxRetries = 10;
       int tries = 0;
       while(true) {
@@ -303,10 +301,12 @@ public class Driver implements java.sql.Driver {
           thread.start();
           return ct.getResult(timeout);
         } catch (PSQLException ex1) {
-          if (lbprops.hasLoadBalance() && tries++ < maxRetries &&
+          LOGGER.log(Level.INFO, "got exception state: " + ex1.getSQLState());
+          if (lbprops.hasLoadBalance() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
               ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
             LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
-                + "TODO" + " trying other servers, retryAttempt=" + tries, ex1);
+                + prevTimedOutServers.get(prevTimedOutServers.size()) + 
+                " trying other servers, retryAttempt=" + tries);
           } else {
             throw ex1;
           }
@@ -506,7 +506,7 @@ public class Driver implements java.sql.Driver {
    *
    * @param url           the original URL
    * @param properties    the parsed/defaulted connection properties
-   * @param timedOutHosts
+   * @param timedOutHosts A list of previously timedout servers passed from Connect thread 
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
@@ -519,6 +519,9 @@ public class Driver implements java.sql.Driver {
       }
       LOGGER.log(Level.WARNING, "Failed to apply load balance. Trying normal connection");
     }
+    // Make the timedOutHosts empty so that the connect thread does not retry because of failures from
+    // the original connect attempt.
+    if (timedOutHosts != null) timedOutHosts.clear();
     // Attempt connection with the original properties
     return new PgConnection(hostSpecs(properties), user(properties), database(properties), properties, url);
   }
