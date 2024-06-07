@@ -3,12 +3,9 @@ package com.yugabyte.ysql;
 import static com.yugabyte.ysql.FallbackOptionsLBTest.*;
 import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
 
-import com.yugabyte.ysql.LoadBalanceProperties;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.HashMap;
 import java.util.Map;
 
 public class LoadBalanceTest {
@@ -27,28 +24,14 @@ public class LoadBalanceTest {
     }
     Class.forName("org.postgresql.Driver");
 
-    Map<String, Integer> expected1 = new HashMap<>();
-    expected1.put("127.0.0.1", numThreads/3 + 1); // +1 for control connection
-    expected1.put("127.0.0.2", numThreads/3);
-    expected1.put("127.0.0.3", numThreads/3);
+    Map<String, Integer> expected1 = expectedInput(numThreads/3 + 1, numThreads/3, numThreads/3);
     int total = numThreads * numConnectionsPerThread;
-    Map<String, Integer> expected2 = new HashMap<>();
-    expected2.put("127.0.0.1", total/4 + 1); // +1 for control connection
-    expected2.put("127.0.0.2", total/4);
-    expected2.put("127.0.0.3", total/4);
-    expected2.put("127.0.0.4", total/4);
+    Map<String, Integer> expected2 = expectedInput(total/4 + 1, total/4, total/4, total/4);
     testConcurrentConnectionCreations(baseUrl, expected1, expected2, "127.0.0.1");
 
     String tkValues = "aws.us-west.us-west-2z:1,aws.us-west.us-west-2b:2,aws.us-west.us-west-2c:2";
-    expected1.clear();
-    expected1.put("127.0.0.1", +1); // control connection
-    expected1.put("127.0.0.2", numThreads/2);
-    expected1.put("127.0.0.3", numThreads/2);
-    expected2.clear();
-    expected2.put("127.0.0.1", +1);
-    expected2.put("127.0.0.2", numThreads/2);
-    expected2.put("127.0.0.3", numThreads/2); // control connection
-    expected2.put("127.0.0.4", numThreads);
+    expected1 = expectedInput(+1, numThreads/2, numThreads/2);
+    expected2 = expectedInput(+1, numThreads/2, numThreads/2, numThreads);
     testConcurrentConnectionCreations(baseTAUrl + tkValues, expected1, expected2, "127.0.0.1");
   }
 
