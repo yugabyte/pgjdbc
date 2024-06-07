@@ -110,7 +110,7 @@ public class ClusterAwareLoadBalancer {
     int min = Integer.MAX_VALUE;
     ArrayList<String> minConnectionsHostList = new ArrayList<>();
     for (String h : hostToNumConnMap.keySet()) {
-      boolean wasTimedOutHost = timedOutHosts != null && timedOutHosts.contains(h) ? true : false;
+      boolean wasTimedOutHost = timedOutHosts != null && timedOutHosts.contains(h);
       if (failedHosts.contains(h) || wasTimedOutHost) {
         LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost +")");
         continue;
