@@ -1,15 +1,13 @@
 package com.yugabyte.ysql;
 
+import static org.postgresql.util.internal.Nullness.castNonNull;
+
 import org.postgresql.core.PGStream;
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.GT;
 import org.postgresql.util.HostSpec;
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.PSQLState;
-
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.net.ssl.SSLSession;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -23,7 +21,9 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static org.postgresql.util.internal.Nullness.castNonNull;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 
 public class YBManagedHostnameVerifier implements HostnameVerifier {
 
@@ -113,8 +113,7 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
     HostSpec[] hspec = hostSpecs(this.originalProperties);
     try {
       if (controlConnection == null) {
-        controlConnection = new PgConnection(
-            hspec, originalProperties.getProperty("user", ""), originalProperties.getProperty("PGDBNAME", ""), originalProperties, null);
+        controlConnection = new PgConnection(hspec, originalProperties, null);
       }
     } catch (SQLException e) {
       throw new RuntimeException(e);

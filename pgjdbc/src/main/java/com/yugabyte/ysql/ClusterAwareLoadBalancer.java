@@ -13,6 +13,8 @@
 
 package com.yugabyte.ysql;
 
+import static com.yugabyte.ysql.LoadBalanceProperties.*;
+
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.GT;
 import org.postgresql.util.PSQLException;
@@ -28,8 +30,6 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static com.yugabyte.ysql.LoadBalanceProperties.*;
 
 public class ClusterAwareLoadBalancer {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
@@ -87,7 +87,7 @@ public class ClusterAwareLoadBalancer {
     return false;
   }
 
-  public synchronized String getLeastLoadedServer(List<String> failedHosts) {
+  public synchronized String getLeastLoadedServer(List<String> failedHosts, ArrayList<String> timedOutHosts) {
     LOGGER.fine("failedHosts: " + failedHosts + ", hostToNumConnMap: " + hostToNumConnMap);
     if ((hostToNumConnMap.isEmpty() && currentPublicIps.isEmpty())
         || Boolean.getBoolean(EXPLICIT_FALLBACK_ONLY_KEY)) {
@@ -110,8 +110,9 @@ public class ClusterAwareLoadBalancer {
     int min = Integer.MAX_VALUE;
     ArrayList<String> minConnectionsHostList = new ArrayList<>();
     for (String h : hostToNumConnMap.keySet()) {
-      if (failedHosts.contains(h)) {
-        LOGGER.fine("Skipping failed host " + h);
+      boolean wasTimedOutHost = timedOutHosts != null && timedOutHosts.contains(h);
+      if (failedHosts.contains(h) || wasTimedOutHost) {
+        LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost +")");
         continue;
       }
       int currLoad = hostToNumConnMap.get(h);
@@ -155,7 +156,7 @@ public class ClusterAwareLoadBalancer {
           }
         }
         // base condition for this recursive call is useHostColumn != null
-        return getLeastLoadedServer(failedHosts);
+        return getLeastLoadedServer(failedHosts, timedOutHosts);
       }
     }
     LOGGER.log(Level.FINE,

@@ -314,15 +314,35 @@ public class Driver implements java.sql.Driver {
       // we managed to establish one after all. See ConnectThread for
       // more details.
       long timeout = timeout(props);
+      LoadBalanceProperties lbprops = new LoadBalanceProperties(url, props);
+
       if (timeout <= 0) {
-        return makeConnection(url, props);
+        return makeConnection(url, props, lbprops, null);
       }
 
-      ConnectThread ct = new ConnectThread(url, props);
-      Thread thread = new Thread(ct, "PostgreSQL JDBC driver connection thread");
-      thread.setDaemon(true); // Don't prevent the VM from shutting down
-      thread.start();
-      return ct.getResult(timeout);
+      ConnectThread ct;
+      ArrayList<String> prevTimedOutServers = new ArrayList<>();
+      int maxRetries = 10;
+      int tries = 0;
+      while(true) {
+        ct = new ConnectThread(url, props, lbprops, prevTimedOutServers);
+        try {
+          Thread thread = new Thread(ct, "PostgreSQL JDBC driver connection thread");
+          thread.setDaemon(true); // Don't prevent the VM from shutting down
+          thread.start();
+          return ct.getResult(timeout);
+        } catch (PSQLException ex1) {
+          LOGGER.log(Level.INFO, "got exception state: " + ex1.getSQLState());
+          if (lbprops.hasLoadBalance() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
+              ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
+            LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
+                + prevTimedOutServers.get(prevTimedOutServers.size()) +
+                " trying other servers, retryAttempt=" + tries);
+          } else {
+            throw ex1;
+          }
+        }
+      }
     } catch (PSQLException ex1) {
       LOGGER.log(Level.FINE, "Connection error: ", ex1);
       // re-throw the exception, otherwise it will be caught next, and a
@@ -361,9 +381,14 @@ public class Driver implements java.sql.Driver {
     private final ResourceLock lock = new ResourceLock();
     private final Condition lockCondition = lock.newCondition();
 
-    ConnectThread(String url, Properties props) {
+    private final ArrayList<String> triedHosts;
+    private final LoadBalanceProperties lbprops;
+    ConnectThread(String url, Properties props,
+        LoadBalanceProperties lbprops, ArrayList<String> prevTimedOutServers) {
       this.url = url;
       this.props = props;
+      this.lbprops = lbprops;
+      triedHosts = prevTimedOutServers;
     }
 
     @Override
@@ -372,7 +397,7 @@ public class Driver implements java.sql.Driver {
       Throwable error;
 
       try {
-        conn = makeConnection(url, props);
+        conn = makeConnection(url, props, lbprops, triedHosts);
         error = null;
       } catch (Throwable t) {
         conn = null;
@@ -457,32 +482,37 @@ public class Driver implements java.sql.Driver {
    * Create a connection from URL and properties. Always does the connection work in the current
    * thread without enforcing a timeout, regardless of any timeout specified in the properties.
    *
-   * @param url the original URL
-   * @param properties the parsed/defaulted connection properties
+   * @param url           the original URL
+   * @param properties    the parsed/defaulted connection properties
+   * @param timedOutHosts A list of previously timedout servers passed from Connect thread
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
-  private static Connection makeConnection(String url, Properties properties) throws SQLException {
-    LoadBalanceProperties lbprops = new LoadBalanceProperties(url, properties);
+  private static Connection makeConnection(String url, Properties properties,
+      LoadBalanceProperties lbprops, ArrayList<String> timedOutHosts) throws SQLException {
     if (lbprops.hasLoadBalance()) {
-      Connection conn = getConnectionBalanced(lbprops);
+      Connection conn = getConnectionBalanced(lbprops, timedOutHosts);
       if (conn != null) {
         return conn;
       }
       LOGGER.log(Level.WARNING, "Failed to apply load balance. Trying normal connection");
     }
+    // Make the timedOutHosts empty so that the connect thread does not retry because of failures from
+    // the original connect attempt.
+    if (timedOutHosts != null) timedOutHosts.clear();
     // Attempt connection with the original properties
     return new PgConnection(hostSpecs(properties), properties, url);
   }
 
-  private static Connection getConnectionBalanced(LoadBalanceProperties lbprops) {
+  private static Connection getConnectionBalanced(LoadBalanceProperties lbprops,
+      ArrayList<String> timedOutHosts) {
     LOGGER.log(Level.FINE, "GetConnectionBalanced called");
     ClusterAwareLoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
     Properties props = lbprops.getStrippedProperties();
     String url = lbprops.getStrippedURL();
     Set<String> unreachableHosts = loadBalancer.getUnreachableHosts();
     List<String> failedHosts = new ArrayList<>(unreachableHosts);
-    String chosenHost = loadBalancer.getLeastLoadedServer(failedHosts);
+    String chosenHost = loadBalancer.getLeastLoadedServer(failedHosts, timedOutHosts);
     PgConnection newConnection = null;
     Connection controlConnection = null;
     SQLException firstException = null;
@@ -501,6 +531,7 @@ public class Driver implements java.sql.Driver {
         controlConnection.close();
       } catch (SQLException ex) {
         if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
+          LOGGER.log(Level.WARNING, "yb_servers() is not defined on the server");
           return null;
         }
         gotException = true;
@@ -513,7 +544,7 @@ public class Driver implements java.sql.Driver {
           }
         }
       }
-      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts);
+      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts, timedOutHosts);
     }
     if (chosenHost == null) {
       return null;
@@ -526,6 +557,9 @@ public class Driver implements java.sql.Driver {
         String port = loadBalancer.getPort(chosenHost);
         if (port != null) {
           props.setProperty("PGPORT", port);
+        }
+        if (timedOutHosts != null) {
+          timedOutHosts.add(chosenHost);
         }
         newConnection = new PgConnection(hostSpecs(props), props, url);
         newConnection.setLoadBalancer(loadBalancer);
@@ -550,7 +584,7 @@ public class Driver implements java.sql.Driver {
                 "A higher priority node than " + chosenHost + " is available");
             loadBalancer.decrementHostToNumConnCount(chosenHost);
             newConnection.close();
-            return getConnectionBalanced(lbprops);
+            return getConnectionBalanced(lbprops, timedOutHosts);
           }
           return newConnection;
         }
@@ -582,7 +616,7 @@ public class Driver implements java.sql.Driver {
               "got exception " + ex.getMessage() + ", while connecting to " + chosenHost);
         }
       }
-      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts);
+      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts, timedOutHosts);
     }
     return null;
   }
