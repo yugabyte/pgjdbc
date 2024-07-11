@@ -238,12 +238,10 @@ public class LoadBalanceService {
   }
 
   public static Connection getConnection(String url, Properties properties, String user,
-      String database) {
-    LoadBalanceProperties lbProperties = LoadBalanceProperties.getLoadBalanceProperties(url,
-        properties);
+      String database, LoadBalanceProperties lbProperties, ArrayList<String> timedOutHosts) {
     // Cleanup extra properties used for load balancing?
     if (lbProperties.hasLoadBalance()) {
-      Connection conn = getConnection(lbProperties, properties, user, database);
+      Connection conn = getConnection(lbProperties, properties, user, database, timedOutHosts);
       if (conn != null) {
         return conn;
       }
@@ -255,7 +253,7 @@ public class LoadBalanceService {
   }
 
   private static Connection getConnection(LoadBalanceProperties loadBalanceProperties,
-      Properties props, String user, String dbName) {
+      Properties props, String user, String dbName, ArrayList<String> timedOutHosts) {
     LoadBalancer lb = loadBalanceProperties.getAppropriateLoadBalancer();
     String url = loadBalanceProperties.getStrippedURL();
 
@@ -265,13 +263,16 @@ public class LoadBalanceService {
     }
 
     List<String> failedHosts = new ArrayList<>();
-    String chosenHost = lb.getLeastLoadedServer(true, failedHosts);
+    String chosenHost = lb.getLeastLoadedServer(true, failedHosts, timedOutHosts);
     PgConnection newConnection;
     SQLException firstException = null;
     while (chosenHost != null) {
       try {
         props.setProperty("PGHOST", chosenHost);
         props.setProperty("PGPORT", String.valueOf(getPort(chosenHost)));
+        if (timedOutHosts != null) {
+          timedOutHosts.add(chosenHost);
+        }
         newConnection = new PgConnection(hostSpecs(props), user, dbName, props, url);
         newConnection.setLoadBalancer(lb);
         LOGGER.fine("Created connection to " + chosenHost);
@@ -299,7 +300,7 @@ public class LoadBalanceService {
         decrementConnectionCount(chosenHost);
         throw e;
       }
-      chosenHost = lb.getLeastLoadedServer(false, failedHosts);
+      chosenHost = lb.getLeastLoadedServer(false, failedHosts, timedOutHosts);
     }
     LOGGER.fine("No host could be chosen");
     return null;

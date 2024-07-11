@@ -38,6 +38,7 @@ import org.postgresql.util.SharedTimer;
 import org.postgresql.util.URLCoder;
 
 import com.yugabyte.ysql.LoadBalanceService;
+import com.yugabyte.ysql.LoadBalanceProperties;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.IOException;
@@ -281,8 +282,7 @@ public class Driver implements java.sql.Driver {
       // we managed to establish one after all. See ConnectThread for
       // more details.
       long timeout = timeout(props);
-      LoadBalanceProperties lbprops = new LoadBalanceProperties(url, props);
-
+      LoadBalanceProperties lbprops = LoadBalanceProperties.getLoadBalanceProperties(url, props);
       if (timeout <= 0) {
         return makeConnection(url, props, lbprops, null);
       }
@@ -303,7 +303,7 @@ public class Driver implements java.sql.Driver {
           if (lbprops.hasLoadBalance() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
               ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
             LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
-                + prevTimedOutServers.get(prevTimedOutServers.size()) + 
+                + prevTimedOutServers.get(prevTimedOutServers.size()) +
                 " trying other servers, retryAttempt=" + tries);
           } else {
             throw ex1;
@@ -504,14 +504,14 @@ public class Driver implements java.sql.Driver {
    *
    * @param url           the original URL
    * @param properties    the parsed/defaulted connection properties
-   * @param timedOutHosts A list of previously timedout servers passed from Connect thread 
+   * @param timedOutHosts A list of previously timedout servers passed from Connect thread
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
   private static Connection makeConnection(String url, Properties properties,
       LoadBalanceProperties lbprops, ArrayList<String> timedOutHosts) throws SQLException {
     Connection connection = LoadBalanceService.getConnection(url, properties, user(properties),
-        database(properties)); // todo pass timedOutHosts
+        database(properties), lbprops, timedOutHosts);
     if (connection != null) {
       return connection;
     }

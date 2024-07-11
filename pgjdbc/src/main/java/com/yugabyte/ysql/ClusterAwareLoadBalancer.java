@@ -58,8 +58,11 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts) {
     LOGGER.fine("failedHosts: " + failedHosts + ", timedOutHosts: " + timedOutHosts);
-    attempted = failedHosts; // todo add timedOutHosts
-    ArrayList<String> hosts = LoadBalanceManager.getAllEligibleHosts(this);
+    attempted = failedHosts;
+    if (timedOutHosts != null) {
+      attempted.addAll(timedOutHosts);
+    }
+    ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this);
 
     int min = Integer.MAX_VALUE;
     ArrayList<String> minConnectionsHostList = new ArrayList<>();

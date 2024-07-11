@@ -126,7 +126,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         && !isDown;
   }
 
-  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts) {
+  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts) {
     LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts);
     // Reset currentPlacementIndex if it's a new request AND refresh() happened after the
     // last request was processed
@@ -141,6 +141,9 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     String chosenHost = null;
     while (chosenHost == null && currentPlacementIndex <= MAX_PREFERENCE_VALUE) {
       attempted = failedHosts;
+      if (timedOutHosts != null) {
+        attempted.addAll(timedOutHosts);
+      }
       hosts = LoadBalanceService.getAllEligibleHosts(this);
 
       int min = Integer.MAX_VALUE;
