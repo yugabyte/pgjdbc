@@ -1,7 +1,6 @@
 package com.yugabyte.ysql;
 
 import static com.yugabyte.ysql.FallbackOptionsLBTest.*;
-import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -103,7 +102,7 @@ public class LoadBalanceTest {
 
     } finally {
       waitForSignal = true;
-      CONNECTION_MANAGER_MAP.clear();
+      LoadBalanceProperties.clearConnectionManagerMap();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 15);
     }
   }

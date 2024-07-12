@@ -58,7 +58,7 @@ public class LoadBalanceProperties {
    load-balance 'simple' to be used as KEY and for targeted topologies,
     <placements> value specified will be used as key
    */
-  public static final Map<String, LoadBalancer> CONNECTION_MANAGER_MAP =
+  private static final Map<String, LoadBalancer> CONNECTION_MANAGER_MAP =
       new HashMap<>();
 
   private static Map<LoadBalancerKey, LoadBalanceProperties> loadBalancePropertiesMap =
@@ -73,6 +73,16 @@ public class LoadBalanceProperties {
   private boolean refreshIntervalSpecified;
   private int failedHostReconnectDelaySecs = -1;
   private boolean failedHostReconnectDelaySpecified;
+
+  /**
+   * FOR TEST PURPOSE ONLY
+   */
+  static void clearConnectionManagerMap() {
+    LOGGER.warning("Clearing CONNECTION_MANAGER_MAP for testing purposes");
+    synchronized (CONNECTION_MANAGER_MAP) {
+      CONNECTION_MANAGER_MAP.clear();
+    }
+  }
 
   public static LoadBalanceProperties getLoadBalanceProperties(String url, Properties properties) {
     LoadBalancerKey key = new LoadBalancerKey(url, properties);

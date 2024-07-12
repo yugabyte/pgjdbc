@@ -1,7 +1,5 @@
 package com.yugabyte.ysql;
 
-import static com.yugabyte.ysql.LoadBalanceProperties.CONNECTION_MANAGER_MAP;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -67,7 +65,7 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:-2,aws" + ".us-west.us-west-2c:3", null);
       createConnectionsAndVerify(baseUrl, "aws.us-west.us-west-2a:1,aws.us-west.us-west-2b:2,aws" + ".us-west.us-west-2c:", null);
     } finally {
-      CONNECTION_MANAGER_MAP.clear();
+      LoadBalanceProperties.clearConnectionManagerMap();
       LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
@@ -104,7 +102,7 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify("jdbc:yugabytedb://127.0.0.4:5433/yugabyte?load-balance=true&fallback-to-topology-keys-only=true&topology-keys=",
           "aws.us-west.us-west-1a", expectedInput(-1, -1, -1, 12+1, 0, 0));
     } finally {
-      CONNECTION_MANAGER_MAP.clear();
+      LoadBalanceProperties.clearConnectionManagerMap();
       LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
@@ -159,7 +157,7 @@ public class FallbackOptionsLBTest {
       createConnectionsAndVerify(url, tk, expectedInput(-1, 12, -1, -1, -1, +1, -1, -1, -1));
 
     } finally {
-      CONNECTION_MANAGER_MAP.clear();
+      LoadBalanceProperties.clearConnectionManagerMap();
       LoadBalanceService.clear();
       executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
     }
