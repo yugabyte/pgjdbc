@@ -303,7 +303,7 @@ public class Driver implements java.sql.Driver {
           if (lbprops.hasLoadBalance() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
               ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
             LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
-                + prevTimedOutServers.get(prevTimedOutServers.size()) +
+                + prevTimedOutServers.get(prevTimedOutServers.size() - 1) +
                 " trying other servers, retryAttempt=" + tries);
           } else {
             throw ex1;

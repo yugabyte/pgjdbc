@@ -18,7 +18,7 @@
 
 echoSleep() {
   echo "$1"
-  SLEEP 1
+  sleep 1
 }
 
 #this function will check and print the verbose statement if required
@@ -66,7 +66,7 @@ interact() {
   if [ $1 -eq 1 ]
   then
     read -p "Press ENTER to continue" dummy
-    SLEEP 0.2
+    sleep 0.2
   fi
 }
 
@@ -118,7 +118,7 @@ $INSTALL_DIR/bin/yb-ctl stop_node 2 >> yb-ctl.log 2>&1
 touch .jdbc_example_app_checker2 #resuming the java app
 
 pauseScript "perform_cleanup"
-SLEEP 2
+sleep 2
 
 interact $INTERACTIVE
 

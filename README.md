@@ -35,7 +35,7 @@ Either add the following lines to your maven project in pom.xml file.
 <dependency>
   <groupId>com.yugabyte</groupId>
   <artifactId>jdbc-yugabytedb</artifactId>
-  <version>42.3.0</version>
+  <version>42.3.5-yb-6</version>
 </dependency>
 ```
 

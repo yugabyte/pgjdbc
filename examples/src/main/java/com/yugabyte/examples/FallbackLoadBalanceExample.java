@@ -188,7 +188,7 @@ public class FallbackLoadBalanceExample {
     executeCmd(path + "/bin/yb-ctl destroy", "Stop YugabyteDB cluster", 10);
 
     executeCmd(path + "/bin/yb-ctl --rf 3 start --placement_info \"aws.us-west.us-west-1a\" ",
-        "Start YugabyteDB rf=3 cluster", 15);
+        "Start YugabyteDB rf=3 cluster", 60);
     executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",
         "Add a node", 10);
     executeCmd(path + "/bin/yb-ctl add_node --placement_info \"aws.us-east.us-east-2a\"",

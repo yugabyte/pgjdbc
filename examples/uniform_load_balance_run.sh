@@ -18,7 +18,7 @@
 
 echoSleep() {
   echo "$1"
-  SLEEP 1
+  sleep 1
 }
 
 #this function will check and print the verbose statement if required
@@ -66,7 +66,7 @@ interact() {
   if [ $1 -eq 1 ]
   then
     read -p "Press ENTER to continue" dummy
-    SLEEP 0.2
+    sleep 0.2
   fi
 }
 
@@ -80,7 +80,7 @@ $INSTALL_DIR/bin/yb-ctl destroy  > yb-ctl.log 2>&1
 
 echo "Creating a 3-node, RF-3 cluster (live nodes: 1,2,3)"
 $INSTALL_DIR/bin/yb-ctl create --rf 3  >> yb-ctl.log 2>&1
-SLEEP 5 # Allow some time for the cluster to be ready
+sleep 5 # Allow some time for the cluster to be ready
 
 #deleting the checker file if exists
 verbosePrint $VERBOSE "Deleting all the temporary checker files if exists"
@@ -106,7 +106,7 @@ interact $INTERACTIVE
 
 echoSleep "Adding Node-4 to the cluster (live nodes: 1,2,3,4)"
 $INSTALL_DIR/bin/yb-ctl add_node >> yb-ctl.log 2>&1
-SLEEP 5 # Allow some time for the node to be ready
+sleep 5 # Allow some time for the node to be ready
 
 touch .jdbc_example_app_checker   #resuming the java app
 
@@ -120,7 +120,7 @@ $INSTALL_DIR/bin/yb-ctl stop_node 3 >> yb-ctl.log 2>&1
 touch .jdbc_example_app_checker2  #resuming the java app
 
 pauseScript "perform_cleanup"
-SLEEP 2
+sleep 2
 
 interact $INTERACTIVE
 

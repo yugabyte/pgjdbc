@@ -75,7 +75,7 @@ then
   exit 1
 fi
 
-SLEEP 1
+sleep 1
 
 verbosePrint $VERBOSE "YugabyteDB installation directory is: $INSTALL_DIR"
 
