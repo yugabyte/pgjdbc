@@ -191,13 +191,13 @@ public class LoadBalanceProperties {
             DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
       }
       if (originalProperties.containsKey(EXPLICIT_FALLBACK_ONLY_KEY)) {
-        failedHostReconnectDelaySpecified = true;
         String propValue = originalProperties.getProperty(EXPLICIT_FALLBACK_ONLY_KEY);
         if (propValue.equalsIgnoreCase("true")) {
           explicitFallbackOnly = true;
         }
       }
       if (originalProperties.containsKey(FAILED_HOST_RECONNECT_DELAY_SECS_KEY)) {
+        failedHostReconnectDelaySpecified = true;
         failedHostReconnectDelaySecs =
             parseAndGetValue(originalProperties.getProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY),
                 DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS);

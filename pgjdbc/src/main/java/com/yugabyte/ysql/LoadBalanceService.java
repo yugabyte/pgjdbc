@@ -27,7 +27,7 @@ import java.util.logging.Logger;
 
 public class LoadBalanceService {
 
-  private static ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
+  private static final ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
   private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
@@ -109,10 +109,10 @@ public class LoadBalanceService {
         long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs has elapsed");
+            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has elapsed");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs has not elapsed");
+            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
           }
         }
       }
