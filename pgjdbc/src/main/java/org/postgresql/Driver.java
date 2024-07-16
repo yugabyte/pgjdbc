@@ -36,8 +36,8 @@ import org.postgresql.util.PSQLState;
 import org.postgresql.util.SharedTimer;
 import org.postgresql.util.URLCoder;
 
-import com.yugabyte.ysql.ClusterAwareLoadBalancer;
 import com.yugabyte.ysql.LoadBalanceProperties;
+import com.yugabyte.ysql.LoadBalanceService;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.IOException;
@@ -54,7 +54,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -314,8 +313,7 @@ public class Driver implements java.sql.Driver {
       // we managed to establish one after all. See ConnectThread for
       // more details.
       long timeout = timeout(props);
-      LoadBalanceProperties lbprops = new LoadBalanceProperties(url, props);
-
+      LoadBalanceProperties lbprops = LoadBalanceProperties.getLoadBalanceProperties(url, props);
       if (timeout <= 0) {
         return makeConnection(url, props, lbprops, null);
       }
@@ -336,7 +334,7 @@ public class Driver implements java.sql.Driver {
           if (lbprops.hasLoadBalance() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
               ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
             LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
-                + prevTimedOutServers.get(prevTimedOutServers.size()) +
+                + prevTimedOutServers.get(prevTimedOutServers.size() - 1) +
                 " trying other servers, retryAttempt=" + tries);
           } else {
             throw ex1;
@@ -490,135 +488,15 @@ public class Driver implements java.sql.Driver {
    */
   private static Connection makeConnection(String url, Properties properties,
       LoadBalanceProperties lbprops, ArrayList<String> timedOutHosts) throws SQLException {
-    if (lbprops.hasLoadBalance()) {
-      Connection conn = getConnectionBalanced(lbprops, timedOutHosts);
-      if (conn != null) {
-        return conn;
-      }
-      LOGGER.log(Level.WARNING, "Failed to apply load balance. Trying normal connection");
+    Connection connection = LoadBalanceService.getConnection(url, properties,
+        lbprops, timedOutHosts);
+    if (connection != null) {
+      return connection;
     }
     // Make the timedOutHosts empty so that the connect thread does not retry because of failures from
     // the original connect attempt.
     if (timedOutHosts != null) timedOutHosts.clear();
-    // Attempt connection with the original properties
     return new PgConnection(hostSpecs(properties), properties, url);
-  }
-
-  private static Connection getConnectionBalanced(LoadBalanceProperties lbprops,
-      ArrayList<String> timedOutHosts) {
-    LOGGER.log(Level.FINE, "GetConnectionBalanced called");
-    ClusterAwareLoadBalancer loadBalancer = lbprops.getAppropriateLoadBalancer();
-    Properties props = lbprops.getStrippedProperties();
-    String url = lbprops.getStrippedURL();
-    Set<String> unreachableHosts = loadBalancer.getUnreachableHosts();
-    List<String> failedHosts = new ArrayList<>(unreachableHosts);
-    String chosenHost = loadBalancer.getLeastLoadedServer(failedHosts, timedOutHosts);
-    PgConnection newConnection = null;
-    Connection controlConnection = null;
-    SQLException firstException = null;
-    if (chosenHost == null) {
-      boolean connectionCreated = false;
-      boolean gotException = false;
-      try {
-        HostSpec[] hspec = hostSpecs(lbprops.getOriginalProperties());
-        controlConnection = new PgConnection(hspec, props, url);
-        connectionCreated = true;
-        if (!loadBalancer.refresh(controlConnection)) {
-          LOGGER.log(Level.WARNING, "yb_servers() refresh failed in first"
-              + " attempt itself. Falling back to default behaviour");
-          return null;
-        }
-        controlConnection.close();
-      } catch (SQLException ex) {
-        if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
-          LOGGER.log(Level.WARNING, "yb_servers() is not defined on the server");
-          return null;
-        }
-        gotException = true;
-      } finally {
-        if (gotException && connectionCreated) {
-          try {
-            controlConnection.close();
-          } catch (SQLException throwables) {
-            // ignore it was to be closed
-          }
-        }
-      }
-      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts, timedOutHosts);
-    }
-    if (chosenHost == null) {
-      return null;
-    }
-    // refresh can also fail on a particular server so try in loop till
-    // options are exhausted
-    while (chosenHost != null) {
-      try {
-        props.setProperty("PGHOST", chosenHost);
-        String port = loadBalancer.getPort(chosenHost);
-        if (port != null) {
-          props.setProperty("PGPORT", port);
-        }
-        if (timedOutHosts != null) {
-          timedOutHosts.add(chosenHost);
-        }
-        newConnection = new PgConnection(hostSpecs(props), props, url);
-        newConnection.setLoadBalancer(loadBalancer);
-        if (!loadBalancer.refresh(newConnection)) {
-          // There seems to be a problem with the current chosen host as well.
-          // Close the connection and try next
-          LOGGER.log(Level.WARNING, "yb_servers() refresh returned no servers");
-          loadBalancer.updateConnectionMap(chosenHost, -1);
-          failedHosts.add(chosenHost);
-          // but let the refresh be forced the next time it is tried.
-          loadBalancer.setForRefresh();
-          try {
-            newConnection.close();
-          } catch (Exception e) {
-            // ignore as exception is expected. This close is for any other cleanup
-            // which the driver side may be doing
-          }
-        } else {
-          boolean betterNodeAvailable = loadBalancer.hasMorePreferredNode(chosenHost);
-          if (betterNodeAvailable) {
-            LOGGER.log(Level.FINE,
-                "A higher priority node than " + chosenHost + " is available");
-            loadBalancer.decrementHostToNumConnCount(chosenHost);
-            newConnection.close();
-            return getConnectionBalanced(lbprops, timedOutHosts);
-          }
-          return newConnection;
-        }
-      } catch (SQLException ex) {
-        // Let the refresh be forced the next time it is tried.
-        loadBalancer.setForRefresh();
-        // close the connection for any cleanup. We can ignore the exception here
-        try {
-          newConnection.close();
-        } catch (Exception e) {
-          // ignore as the connection is already bad that's why we are here. Calling
-          // close so that client side cleanup can happen.
-        }
-        failedHosts.add(chosenHost);
-        if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
-          if (firstException == null) {
-            firstException = ex;
-          }
-          // TODO log exception go to the next one after adding to failed list
-          LOGGER.log(Level.WARNING,
-              "couldn't connect to " + chosenHost + ", adding it to failed host list");
-          loadBalancer.updateFailedHosts(chosenHost);
-        } else {
-          // Log the exception. Consider other failures as temporary and not as serious as
-          // PSQLState.CONNECTION_UNABLE_TO_CONNECT. So for other failures it will be ignored
-          // only in this attempt, instead of adding it in the failed host list of the
-          // load balancer itself because it won't be tried till the next refresh happens.
-          LOGGER.log(Level.WARNING,
-              "got exception " + ex.getMessage() + ", while connecting to " + chosenHost);
-        }
-      }
-      chosenHost = loadBalancer.getLeastLoadedServer(failedHosts, timedOutHosts);
-    }
-    return null;
   }
 
   /**
@@ -882,9 +760,10 @@ public class Driver implements java.sql.Driver {
   }
 
   /**
+   * @param props the properties to create hostSpec off
    * @return the address portion of the URL
    */
-  private static HostSpec[] hostSpecs(Properties props) {
+  public static HostSpec[] hostSpecs(Properties props) {
     String[] hosts = castNonNull(PGProperty.PG_HOST.getOrDefault(props)).split(",");
     String[] ports = castNonNull(PGProperty.PG_PORT.getOrDefault(props)).split(",");
     String localSocketAddress = PGProperty.LOCAL_SOCKET_ADDRESS.getOrDefault(props);

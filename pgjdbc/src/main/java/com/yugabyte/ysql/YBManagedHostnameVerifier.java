@@ -27,7 +27,7 @@ import javax.net.ssl.SSLSession;
 
 public class YBManagedHostnameVerifier implements HostnameVerifier {
 
-  private static final Logger LOGGER = Logger.getLogger(YBManagedHostnameVerifier.class.getName());
+  private static final Logger LOGGER = Logger.getLogger("org.postgresql." + YBManagedHostnameVerifier.class.getName());
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected Boolean useHostColumn = null;
 

@@ -68,7 +68,8 @@ import org.postgresql.xml.DefaultPGXmlFactoryFactory;
 import org.postgresql.xml.LegacyInsecurePGXmlFactoryFactory;
 import org.postgresql.xml.PGXmlFactoryFactory;
 
-import com.yugabyte.ysql.ClusterAwareLoadBalancer;
+import com.yugabyte.ysql.LoadBalanceService;
+import com.yugabyte.ysql.LoadBalancer;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.checkerframework.dataflow.qual.Pure;
@@ -230,7 +231,7 @@ public class PgConnection implements BaseConnection {
 
   private final LruCache<FieldMetadata.Key, FieldMetadata> fieldMetadataCache;
 
-  private ClusterAwareLoadBalancer loadBalancer;
+  private LoadBalancer loadBalancer;
   private boolean disableNestLoopForMetadataSQLs;
 
   private final @Nullable String xmlFactoryFactoryClass;
@@ -892,11 +893,11 @@ public class PgConnection implements BaseConnection {
     }
     String host = queryExecutor.getHostSpec().getHost();
     if (loadBalancer != null && host != null) {
-      loadBalancer.updateConnectionMap(host, -1);
+      LoadBalanceService.decrementConnectionCount(host);
     }
   }
 
-  public void setLoadBalancer(ClusterAwareLoadBalancer lb) {
+  public void setLoadBalancer(LoadBalancer lb) {
     this.loadBalancer = lb;
   }
 
