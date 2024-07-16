@@ -30,7 +30,7 @@ Please refer to the [Use the Driver](#Use the Driver) section for examples.
 
 ### From Maven
 
-Either add the following lines to your maven project in pom.xml file.
+Either add the following lines to your maven project in pom.xml file (Use the latest version available),
 ```
 <dependency>
   <groupId>com.yugabyte</groupId>
@@ -63,13 +63,13 @@ or you can visit to this link for the latest version of dependency: https://sear
      ./gradlew publishToMavenLocal -x test -x checkstyleMain
     ```
 
-3. Finally, use it by adding the lines below to your project.
+3. Finally, use it by adding the lines below to your project. (Use the latest version available)
 
     ```xml
     <dependency>
         <groupId>com.yugabyte</groupId>
         <artifactId>jdbc-yugabytedb</artifactId>
-        <version>42.3.0</version>
+        <version>42.3.5-yb-6</version>
     </dependency> 
     ```
 > **Note:** You need to have installed 2.7.2.0-b0 or above version of YugabyteDB on your system for load balancing to work.
