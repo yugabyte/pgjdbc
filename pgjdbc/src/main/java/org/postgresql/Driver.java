@@ -300,7 +300,7 @@ public class Driver implements java.sql.Driver {
           return ct.getResult(timeout);
         } catch (PSQLException ex1) {
           LOGGER.log(Level.INFO, "got exception state: " + ex1.getSQLState());
-          if (lbprops.hasLoadBalance() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
+          if (lbprops.isLoadBalanceEnabled() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
               ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
             LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
                 + prevTimedOutServers.get(prevTimedOutServers.size() - 1) +

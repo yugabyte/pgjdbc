@@ -24,6 +24,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   private static volatile ClusterAwareLoadBalancer instance;
   List<String> attempted = new ArrayList<>();
+  private LoadBalanceService.LoadBalance lbValue = LoadBalanceService.LoadBalance.FALSE;
 
   @Override
   public int getRefreshListSeconds() {
@@ -32,14 +33,16 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer() {
+  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalance lb) {
+    this.lbValue = lb;
   }
 
-  public static ClusterAwareLoadBalancer getInstance(int refreshListSeconds) {
+  public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalance lb,
+      int refreshListSeconds) {
     if (instance == null) {
       synchronized (ClusterAwareLoadBalancer.class) {
         if (instance == null) {
-          instance = new ClusterAwareLoadBalancer();
+          instance = new ClusterAwareLoadBalancer(lb);
           instance.refreshListSeconds =
               refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
                   refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
@@ -53,7 +56,15 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   @Override
   public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e) {
-    return !attempted.contains(e.getKey()) && !e.getValue().isDown();
+    return !attempted.contains(e.getKey()) && isRightNodeType(e.getValue()) && !e.getValue().isDown();
+  }
+
+  private boolean isRightNodeType(LoadBalanceService.NodeInfo nodeInfo) {
+    return lbValue == LoadBalanceService.LoadBalance.ANY
+        || (nodeInfo.getNodeType().equalsIgnoreCase("primary")
+            && lbValue != LoadBalanceService.LoadBalance.ONLY_RR)
+        || (nodeInfo.getNodeType().equalsIgnoreCase("read-replica")
+            && lbValue != LoadBalanceService.LoadBalance.ONLY_PRIMARY);
   }
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts) {
@@ -62,7 +73,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     if (timedOutHosts != null) {
       attempted.addAll(timedOutHosts);
     }
-    ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this);
+    ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this, newRequest);
 
     int min = Integer.MAX_VALUE;
     ArrayList<String> minConnectionsHostList = new ArrayList<>();
@@ -84,7 +95,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     }
     // Choose a random from the minimum list
     String chosenHost = null;
-    if (minConnectionsHostList.size() > 0) {
+    if (!minConnectionsHostList.isEmpty()) {
       int idx = ThreadLocalRandom.current().nextInt(0, minConnectionsHostList.size());
       chosenHost = minConnectionsHostList.get(idx);
     }

@@ -94,6 +94,7 @@ public class LoadBalanceService {
       String cloud = rs.getString("cloud");
       String region = rs.getString("region");
       String zone = rs.getString("zone");
+      String nodeType = rs.getString("node_type");
       NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
@@ -176,7 +177,7 @@ public class LoadBalanceService {
     return info == null ? 0 : info.connectionCount;
   }
 
-  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy) {
+  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy, boolean newRequest) {
     ArrayList<String> list = new ArrayList<>();
     Set<Map.Entry<String, NodeInfo>> set = clusterInfoMap.entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
@@ -240,7 +241,7 @@ public class LoadBalanceService {
   public static Connection getConnection(String url, Properties properties, String user,
       String database, LoadBalanceProperties lbProperties, ArrayList<String> timedOutHosts) {
     // Cleanup extra properties used for load balancing?
-    if (lbProperties.hasLoadBalance()) {
+    if (lbProperties.isLoadBalanceEnabled()) {
       Connection conn = getConnection(lbProperties, properties, user, database, timedOutHosts);
       if (conn != null) {
         return conn;
@@ -392,12 +393,13 @@ public class LoadBalanceService {
     return hostConnectedInetAddr;
   }
 
-  static class NodeInfo {
+  public static class NodeInfo {
 
     private String host;
     private int port;
     private CloudPlacement placement;
     private String publicIP;
+    private String nodeType;
     private int connectionCount;
     private boolean isDown;
     private long isDownSince;
@@ -428,6 +430,14 @@ public class LoadBalanceService {
 
     public long getIsDownSince() {
       return isDownSince;
+    }
+
+    public String getNodeType() {
+      return nodeType;
+    }
+
+    public void setNodeType(String nodeType) {
+      this.nodeType = nodeType;
     }
   }
 
@@ -481,5 +491,8 @@ public class LoadBalanceService {
     public String toString() {
       return "CloudPlacement: " + cloud + "." + region + "." + zone;
     }
+  }
+  public enum LoadBalance  {
+      FALSE, ANY, PREFER_PRIMARY, PREFER_RR, ONLY_PRIMARY, ONLY_RR
   }
 }

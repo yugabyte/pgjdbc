@@ -144,7 +144,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       if (timedOutHosts != null) {
         attempted.addAll(timedOutHosts);
       }
-      hosts = LoadBalanceService.getAllEligibleHosts(this);
+      hosts = LoadBalanceService.getAllEligibleHosts(this, newRequest);
 
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();

@@ -13,6 +13,7 @@
 package com.yugabyte.ysql;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,11 +62,11 @@ public class LoadBalanceProperties {
   private static final Map<String, LoadBalancer> CONNECTION_MANAGER_MAP =
       new HashMap<>();
 
-  private static Map<LoadBalancerKey, LoadBalanceProperties> loadBalancePropertiesMap =
-      new ConcurrentHashMap();
+  private static final Map<LoadBalancerKey, LoadBalanceProperties> loadBalancePropertiesMap =
+      new ConcurrentHashMap<>();
   private final String originalUrl;
   private final Properties originalProperties;
-  private boolean hasLoadBalance;
+  private LoadBalanceService.LoadBalance loadBalance;
   private final String ybURL;
   private String placements = null;
   private int refreshInterval = -1;
@@ -113,7 +114,7 @@ public class LoadBalanceProperties {
       String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
       String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
       String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
-      String explicitFallbackOnlyKey = EXPLICIT_FALLBACK_ONLY_KEY;
+      String explicitFallbackOnlyKey = EXPLICIT_FALLBACK_ONLY_KEY + EQUALS;
       String failedHostReconnectDelayKey = FAILED_HOST_RECONNECT_DELAY_SECS_KEY + EQUALS;
       for (String part : urlParts) {
         if (part.startsWith(loadBalancerKey)) {
@@ -123,9 +124,7 @@ public class LoadBalanceProperties {
             continue;
           }
           String propValue = lbParts[1];
-          if (propValue.equalsIgnoreCase("true")) {
-            this.hasLoadBalance = true;
-          }
+          setLoadBalanceValue(propValue);
         } else if (part.startsWith(topologyKey)) {
           String[] lbParts = part.split(EQUALS);
           if (lbParts.length != 2) {
@@ -177,9 +176,7 @@ public class LoadBalanceProperties {
     if (originalProperties != null) {
       if (originalProperties.containsKey(LOAD_BALANCE_PROPERTY_KEY)) {
         String propValue = originalProperties.getProperty(LOAD_BALANCE_PROPERTY_KEY);
-        if (propValue.equalsIgnoreCase("true")) {
-          hasLoadBalance = true;
-        }
+        setLoadBalanceValue(propValue);
       }
       if (originalProperties.containsKey(TOPOLOGY_AWARE_PROPERTY_KEY)) {
         String propValue = originalProperties.getProperty(TOPOLOGY_AWARE_PROPERTY_KEY);
@@ -206,6 +203,32 @@ public class LoadBalanceProperties {
     return sb.toString();
   }
 
+  private void setLoadBalanceValue(String value) {
+    switch (value.toLowerCase(Locale.ROOT)) {
+    case "true":
+    case "any":
+      this.loadBalance = LoadBalanceService.LoadBalance.ANY;
+      break;
+    case "prefer-primary":
+      this.loadBalance = LoadBalanceService.LoadBalance.PREFER_PRIMARY;
+      break;
+    case "prefer-rr":
+      this.loadBalance = LoadBalanceService.LoadBalance.PREFER_RR;
+      break;
+    case "only-primary":
+      this.loadBalance = LoadBalanceService.LoadBalance.ONLY_PRIMARY;
+      break;
+    case "only-rr":
+      this.loadBalance = LoadBalanceService.LoadBalance.ONLY_RR;
+      break;
+    case "false":
+      this.loadBalance = LoadBalanceService.LoadBalance.FALSE;
+      break;
+    default:
+      LOGGER.warning("Invalid value for load-balance: " + value + ", ignoring it.");
+    }
+  }
+
   private int parseAndGetValue(String propValue, int defaultValue, int maxValue) {
     try {
       int value = Integer.parseInt(propValue);
@@ -229,8 +252,8 @@ public class LoadBalanceProperties {
     return originalProperties;
   }
 
-  public boolean hasLoadBalance() {
-    return hasLoadBalance;
+  public boolean isLoadBalanceEnabled() {
+    return this.loadBalance != LoadBalanceService.LoadBalance.FALSE;
   }
 
   public String getPlacements() {
@@ -242,7 +265,7 @@ public class LoadBalanceProperties {
   }
 
   public LoadBalancer getAppropriateLoadBalancer() {
-    if (!hasLoadBalance) {
+    if (!isLoadBalanceEnabled()) {
       throw new IllegalStateException(
           "This method is expected to be called only when load-balance is true");
     }
@@ -257,18 +280,18 @@ public class LoadBalanceProperties {
     LoadBalancer ld = null;
     if (placements == null) {
       // return base class conn manager.
-      ld = CONNECTION_MANAGER_MAP.get(SIMPLE_LB);
+      ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
       if (ld == null) {
         synchronized (CONNECTION_MANAGER_MAP) {
-          ld = CONNECTION_MANAGER_MAP.get(SIMPLE_LB);
+          ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
           if (ld == null) {
-            ld = ClusterAwareLoadBalancer.getInstance(refreshInterval);
-            CONNECTION_MANAGER_MAP.put(SIMPLE_LB, ld);
+            ld = ClusterAwareLoadBalancer.getInstance(this.loadBalance, refreshInterval);
+            CONNECTION_MANAGER_MAP.put(this.loadBalance.name(), ld);
           }
         }
       }
     } else {
-      String key = placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase();
+      String key = placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase(Locale.ROOT);
       ld = CONNECTION_MANAGER_MAP.get(key);
       if (ld == null) {
         synchronized (CONNECTION_MANAGER_MAP) {
