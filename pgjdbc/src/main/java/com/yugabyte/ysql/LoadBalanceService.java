@@ -27,10 +27,13 @@ import java.util.logging.Logger;
 
 public class LoadBalanceService {
 
-  private static final ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
+  private static final ConcurrentHashMap<String, NodeInfo> clusterInfoMap =
+      new ConcurrentHashMap<>();
+  static final byte STRICT_PREFERENCE = 0b00000001;
   private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
-  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
+  protected static final Logger LOGGER =
+      Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static long lastRefreshTime;
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
@@ -95,7 +98,8 @@ public class LoadBalanceService {
       String region = rs.getString("region");
       String zone = rs.getString("zone");
       String nodeType = rs.getString("node_type");
-      NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
+      NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) :
+          new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
         nodeInfo.publicIP = publicHost;
@@ -104,16 +108,20 @@ public class LoadBalanceService {
         try {
           nodeInfo.port = Integer.valueOf(port);
         } catch (NumberFormatException nfe) {
-          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 instead.");
+          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 " +
+              "instead.");
           nodeInfo.port = 5433;
         }
-        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, DEFAULT_FAILED_HOST_TTL_SECONDS);
+        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY,
+            DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has elapsed");
+            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay" +
+                "-secs (" + failedHostTTL + "s) has elapsed");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
+            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay" +
+                "-secs (" + failedHostTTL + "s) has not elapsed");
           }
         }
       }
@@ -177,11 +185,11 @@ public class LoadBalanceService {
     return info == null ? 0 : info.connectionCount;
   }
 
-  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy, boolean newRequest) {
+  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy, Byte requestFlags) {
     ArrayList<String> list = new ArrayList<>();
     Set<Map.Entry<String, NodeInfo>> set = clusterInfoMap.entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
-      if (policy.isHostEligible(e)) {
+      if (policy.isHostEligible(e, requestFlags)) {
         list.add(e.getKey());
       } else {
         LOGGER.finest("Skipping " + e + " because it is not eligible.");
@@ -212,8 +220,8 @@ public class LoadBalanceService {
     if (info != null) {
       synchronized (info) {
         if (info.connectionCount < 0) {
-          info.connectionCount = 0;
           LOGGER.fine("Resetting connection count for " + host + " to zero from " + info.connectionCount);
+          info.connectionCount = 0;
         }
         info.connectionCount += 1;
         return true;
@@ -308,9 +316,8 @@ public class LoadBalanceService {
   }
 
   /**
-   *
    * @param loadBalanceProperties
-   * @param lb LoadBalancer instance
+   * @param lb                    LoadBalancer instance
    * @param user
    * @param dbName
    * @return true if the refresh was not required or if it was successful.
@@ -340,7 +347,8 @@ public class LoadBalanceService {
         } catch (SQLException ex) {
           if (refreshFailed) {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
-            String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
+            String failed =
+                ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
@@ -492,7 +500,8 @@ public class LoadBalanceService {
       return "CloudPlacement: " + cloud + "." + region + "." + zone;
     }
   }
-  public enum LoadBalance  {
-      FALSE, ANY, PREFER_PRIMARY, PREFER_RR, ONLY_PRIMARY, ONLY_RR
+
+  public enum LoadBalance {
+    FALSE, ANY, PREFER_PRIMARY, PREFER_RR, ONLY_PRIMARY, ONLY_RR
   }
 }

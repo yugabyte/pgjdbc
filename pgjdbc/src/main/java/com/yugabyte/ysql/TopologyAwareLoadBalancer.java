@@ -30,7 +30,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 public class TopologyAwareLoadBalancer implements LoadBalancer {
-  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + TopologyAwareLoadBalancer.class.getName());
+  protected static final Logger LOGGER =
+          Logger.getLogger("org.postgresql." + TopologyAwareLoadBalancer.class.getName());
   /**
    * Holds the value of topology-keys specified.
    */
@@ -40,7 +41,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   /**
    * Derived from the placements value above.
    */
-  private final Map<Integer, Set<LoadBalanceService.CloudPlacement>> allowedPlacements = new HashMap<>();
+  private final Map<Integer, Set<LoadBalanceService.CloudPlacement>> allowedPlacements =
+          new HashMap<>();
   private final int PRIMARY_PLACEMENTS_INDEX = 1;
   private final int REST_OF_CLUSTER_INDEX = -1;
   /**
@@ -48,9 +50,10 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
    * reset to zero for a new connection request.
    */
   private int currentPlacementIndex = 1;
-  List<String> attempted = new ArrayList<>();
-  private int refreshIntervalSeconds;
+  private List<String> attempted = new ArrayList<>();
+  private final int refreshIntervalSeconds;
   private boolean explicitFallbackOnly = false;
+  private byte requestFlags;
 
   public TopologyAwareLoadBalancer(String placementValues, boolean onlyExplicitFallback) {
     placements = placementValues;
@@ -92,9 +95,10 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
             allowedPlacements.computeIfAbsent(PRIMARY_PLACEMENTS_INDEX, k -> new HashSet<>());
         populatePlacementSet(v[0], primary);
       } else {
-        int pref = Integer.valueOf(v[1]);
+        int pref = Integer.parseInt(v[1]);
         if (pref > 0 && pref <= MAX_PREFERENCE_VALUE) {
-          Set<LoadBalanceService.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref, k -> new HashSet<>());
+          Set<LoadBalanceService.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref,
+                  k -> new HashSet<>());
           populatePlacementSet(v[0], cpSet);
         } else {
           throw new IllegalArgumentException("Invalid preference value for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
@@ -113,7 +117,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   }
 
   @Override
-  public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e) {
+  public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e,
+          Byte requestFlags) {
     Set<LoadBalanceService.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
     boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX && !explicitFallbackOnly)
         || (set != null && e.getValue().getPlacement().isContainedIn(set));
@@ -126,7 +131,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         && !isDown;
   }
 
-  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts) {
+  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
+          ArrayList<String> timedOutHosts) {
     LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts);
     // Reset currentPlacementIndex if it's a new request AND refresh() happened after the
     // last request was processed
@@ -135,7 +141,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     } else {
       LOGGER.fine("Placements: [" + placements
           + "]. Attempting to connect to servers in fallback level-"
-          + (currentPlacementIndex-1) + " ...");
+          + (currentPlacementIndex - 1) + " ...");
     }
     ArrayList<String> hosts;
     String chosenHost = null;
@@ -144,7 +150,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       if (timedOutHosts != null) {
         attempted.addAll(timedOutHosts);
       }
-      hosts = LoadBalanceService.getAllEligibleHosts(this, newRequest);
+      hosts = LoadBalanceService.getAllEligibleHosts(this, LoadBalanceService.STRICT_PREFERENCE);
 
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
@@ -164,7 +170,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         }
       }
       // Choose a random from the minimum list
-      if (minConnectionsHostList.size() > 0) {
+      if (!minConnectionsHostList.isEmpty()) {
         int idx = ThreadLocalRandom.current().nextInt(0, minConnectionsHostList.size());
         chosenHost = minConnectionsHostList.get(idx);
       }
@@ -179,9 +185,6 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
           if (currentPlacementIndex > MAX_PREFERENCE_VALUE) {
             // All explicit fallbacks are done with no luck. Now try rest-of-cluster
             currentPlacementIndex = REST_OF_CLUSTER_INDEX;
-          } else if (currentPlacementIndex == 0) {
-            // Even rest-of-cluster did not help. Quit
-            break;
           }
         }
         if (currentPlacementIndex == 0) {

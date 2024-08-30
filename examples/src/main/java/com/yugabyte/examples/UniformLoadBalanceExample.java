@@ -51,7 +51,7 @@ public class UniformLoadBalanceExample {
 
     System.out.println("Setting up the connection pool having 6 connections.......");
 
-    testUsingHikariPool("uniform_load_balance", "true", "simple",
+    testUsingHikariPool("uniform_load_balance", "true", "simple", // Change this 'simple'
       controlHost, controlPort, numConnections, verbose, interactive);
   }
 
