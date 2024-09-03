@@ -227,6 +227,7 @@ public class LoadBalanceProperties {
     default:
       LOGGER.warning("Invalid value for load-balance: " + value + ", ignoring it.");
     }
+    LOGGER.info("loadbalance value set to " + this.loadBalance);
   }
 
   private int parseAndGetValue(String propValue, int defaultValue, int maxValue) {
@@ -282,13 +283,16 @@ public class LoadBalanceProperties {
       // return base class conn manager.
       ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
       if (ld == null) {
+        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> No LB found for " + this.loadBalance + ", creating one ...");
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
           if (ld == null) {
-            ld = ClusterAwareLoadBalancer.getInstance(this.loadBalance, refreshInterval);
+            ld = new ClusterAwareLoadBalancer(this.loadBalance, refreshInterval);
             CONNECTION_MANAGER_MAP.put(this.loadBalance.name(), ld);
           }
         }
+      } else {
+        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> LB found for " + this.loadBalance + ", " + ld);
       }
     } else {
       String key = placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase(Locale.ROOT);

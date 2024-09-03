@@ -16,6 +16,7 @@ public interface LoadBalancer {
 
   /**
    * @param e The {@link LoadBalanceService.NodeInfo} object for the host
+   * @param requestFlags The attributes for the load balancer to make use of
    * @return true, if a host is eligible to be considered for a connection request
    */
   boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e, Byte requestFlags);

@@ -4,6 +4,7 @@ import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_FAILED_HOST_TTL_SE
 import static com.yugabyte.ysql.LoadBalanceProperties.FAILED_HOST_RECONNECT_DELAY_SECS_KEY;
 import static org.postgresql.Driver.hostSpecs;
 
+import org.postgresql.PGProperty;
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.GT;
 import org.postgresql.util.HostSpec;
@@ -105,6 +106,8 @@ public class LoadBalanceService {
         nodeInfo.publicIP = publicHost;
         publicIPsGivenForAll = !publicHost.isEmpty();
         nodeInfo.placement = new CloudPlacement(cloud, region, zone);
+        LOGGER.fine("Setting node_type to " + nodeType + " for host " + host);
+        nodeInfo.nodeType = nodeType;
         try {
           nodeInfo.port = Integer.valueOf(port);
         } catch (NumberFormatException nfe) {
@@ -327,14 +330,16 @@ public class LoadBalanceService {
     if (needsRefresh(lb.getRefreshListSeconds())) {
       Properties props = loadBalanceProperties.getOriginalProperties();
       String url = loadBalanceProperties.getStrippedURL();
-      HostSpec[] hspec = hostSpecs(props);
+      Properties properties = new Properties(props);
+      properties.setProperty("socketTimeout", "15");
+      HostSpec[] hspec = hostSpecs(properties);
 
       ArrayList<String> hosts = getAllAvailableHosts(new ArrayList<>());
       while (true) {
         boolean refreshFailed = false;
         try {
           if (controlConnection == null || controlConnection.isClosed()) {
-            controlConnection = new PgConnection(hspec, user, dbName, props, url);
+            controlConnection = new PgConnection(hspec, user, dbName, properties, url);
           }
           try {
             refresh(controlConnection, lb.getRefreshListSeconds());

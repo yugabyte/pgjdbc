@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
+import com.yugabyte.ysql.LoadBalanceService.LoadBalance;
+
 public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER =
       Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
@@ -35,8 +37,9 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalance lb) {
+  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalance lb, int refreshInterval) {
     this.loadBalance = lb;
+    this.refreshListSeconds = refreshInterval;
   }
 
   public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalance lb,
@@ -44,16 +47,19 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     if (instance == null) {
       synchronized (ClusterAwareLoadBalancer.class) {
         if (instance == null) {
-          instance = new ClusterAwareLoadBalancer(lb);
+          instance = new ClusterAwareLoadBalancer(lb, refreshListSeconds);
           instance.refreshListSeconds =
               refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
                   refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
-          LOGGER.fine("Created a new cluster-aware LB instance with refresh" +
-              " interval " + instance.refreshListSeconds + " seconds");
+          LOGGER.fine("Created a new cluster-aware LB instance with loadbalance = " + instance.loadBalance + " and refresh interval " + instance.refreshListSeconds + " seconds");
         }
       }
     }
     return instance;
+  }
+
+  public String toString() {
+    return this.getClass().getSimpleName() + ": loadBalance = " + loadBalance + ", refreshInterval = " + refreshListSeconds;
   }
 
   @Override
@@ -65,24 +71,30 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   private boolean isRightNodeType(String nodeType, byte requestFlags) {
     switch (loadBalance) {
     case ANY:
+      LOGGER.fine("case ANY");
       return true;
     case ONLY_PRIMARY:
+      LOGGER.fine("case ONLY_PRIMARY, nodeType " + nodeType);
       return nodeType.equalsIgnoreCase("primary");
     case ONLY_RR:
-      return nodeType.equalsIgnoreCase("read-replica");
+      LOGGER.fine("case ONLY_RR, nodeType " + nodeType);
+      return nodeType.equalsIgnoreCase("read_replica");
     case PREFER_PRIMARY:
+      LOGGER.fine("case PREFER_PRIMARY, nodeType " + nodeType + " requestFlag " + requestFlags);
       if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
         return nodeType.equalsIgnoreCase("primary");
       } else {
-        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read-replica");
+        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
       }
     case PREFER_RR:
+      LOGGER.fine("case PREFER_RR, nodeType " + nodeType + " requestFlag " + requestFlags);
       if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
-        return nodeType.equalsIgnoreCase("read-replica");
+        return nodeType.equalsIgnoreCase("read_replica");
       } else {
-        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read-replica");
+        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
       }
     default:
+      LOGGER.fine("case default");
       return false;
     }
   }
@@ -133,6 +145,11 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       }
     }
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
+    if (chosenHost == null && (loadBalance == LoadBalance.ONLY_PRIMARY  || loadBalance == LoadBalance.ONLY_RR)) {
+      throw new IllegalStateException("No node available in "
+        + (loadBalance == LoadBalance.ONLY_PRIMARY ? "primary" : "read-replica")
+        + " cluster to connect to");
+    }
     return chosenHost;
   }
 
