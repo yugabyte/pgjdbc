@@ -292,19 +292,22 @@ public class LoadBalanceProperties {
           }
         }
       } else {
-        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> LB found for " + this.loadBalance + ", " + ld);
+        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> LB found for " + this.loadBalance + ": " + ld);
       }
     } else {
-      String key = placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase(Locale.ROOT);
+      String key = this.loadBalance.name() + "&" + placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase(Locale.ROOT);
       ld = CONNECTION_MANAGER_MAP.get(key);
       if (ld == null) {
+        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> No LB found for " + this.loadBalance + " and placements " + placements + " and fallback? " + explicitFallbackOnly + ", creating one ...");
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(key);
           if (ld == null) {
-            ld = new TopologyAwareLoadBalancer(placements, explicitFallbackOnly);
+            ld = new TopologyAwareLoadBalancer(loadBalance, placements, explicitFallbackOnly);
             CONNECTION_MANAGER_MAP.put(key, ld);
           }
         }
+      } else {
+        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> LB found for " + this.loadBalance + " and placements " + placements + ": " + ld);
       }
     }
     return ld;

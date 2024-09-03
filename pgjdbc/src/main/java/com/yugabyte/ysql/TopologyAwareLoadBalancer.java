@@ -29,6 +29,8 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
+import com.yugabyte.ysql.LoadBalanceService.LoadBalance;
+
 public class TopologyAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER =
           Logger.getLogger("org.postgresql." + TopologyAwareLoadBalancer.class.getName());
@@ -36,6 +38,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
    * Holds the value of topology-keys specified.
    */
   private final String placements;
+  private final LoadBalanceService.LoadBalance loadBalance;
 
   private long lastRequestTime;
   /**
@@ -55,7 +58,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private boolean explicitFallbackOnly = false;
   private byte requestFlags;
 
-  public TopologyAwareLoadBalancer(String placementValues, boolean onlyExplicitFallback) {
+  public TopologyAwareLoadBalancer(LoadBalance lb, String placementValues, boolean onlyExplicitFallback) {
+    loadBalance = lb;
     placements = placementValues;
     explicitFallbackOnly = onlyExplicitFallback;
     refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);
@@ -105,6 +109,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         }
       }
     }
+    LOGGER.fine("allowedPlacements: " + allowedPlacements);
   }
 
   @Override
@@ -120,15 +125,18 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e,
           Byte requestFlags) {
     Set<LoadBalanceService.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
-    boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX && !explicitFallbackOnly)
-        || (set != null && e.getValue().getPlacement().isContainedIn(set));
+    boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX
+      && (!explicitFallbackOnly || loadBalance == LoadBalance.PREFER_PRIMARY || loadBalance == LoadBalance.PREFER_RR))
+      || (set != null && e.getValue().getPlacement().isContainedIn(set));
+    boolean isRightNode = LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
     boolean isAttempted = attempted.contains(e.getKey());
     boolean isDown = e.getValue().isDown();
     LOGGER.fine(e.getKey() + " has required placement? " + found + ", isDown? "
-        + isDown + ", attempted? " + isAttempted);
+        + isDown + ", attempted? " + isAttempted + ", isRightNodeType? " + isRightNode);
     return found
         && !isAttempted
-        && !isDown;
+        && !isDown
+        && isRightNode;
   }
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
@@ -145,12 +153,13 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     }
     ArrayList<String> hosts;
     String chosenHost = null;
+    requestFlags = newRequest ? LoadBalanceService.STRICT_PREFERENCE : requestFlags;
     while (chosenHost == null && currentPlacementIndex <= MAX_PREFERENCE_VALUE) {
       attempted = failedHosts;
       if (timedOutHosts != null) {
         attempted.addAll(timedOutHosts);
       }
-      hosts = LoadBalanceService.getAllEligibleHosts(this, LoadBalanceService.STRICT_PREFERENCE);
+      hosts = LoadBalanceService.getAllEligibleHosts(this, requestFlags);
 
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
@@ -188,13 +197,24 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
           }
         }
         if (currentPlacementIndex == 0) {
-          break;
+          if (requestFlags == LoadBalanceService.STRICT_PREFERENCE && (loadBalance == LoadBalance.PREFER_PRIMARY || loadBalance == LoadBalance.PREFER_RR)) {
+            LOGGER.fine("Even rest of cluster did not have a host for us, So relax the node type condition for prefer-* and try again once");
+            currentPlacementIndex = REST_OF_CLUSTER_INDEX;
+            requestFlags = (byte) 0;
+          } else {
+            break;
+          }
         }
         LOGGER.fine("Next, attempting to connect to hosts from placement level " + currentPlacementIndex);
       }
     }
     lastRequestTime = System.currentTimeMillis();
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
+    if (chosenHost == null && (loadBalance == LoadBalance.ONLY_PRIMARY  || loadBalance == LoadBalance.ONLY_RR || (loadBalance == LoadBalance.ANY && explicitFallbackOnly))) {
+      throw new IllegalStateException("No node available in the given placements for the "
+        + (loadBalance == LoadBalance.ONLY_PRIMARY ? "primary" : (loadBalance == LoadBalance.ONLY_RR ? "read-replica" : "entire"))
+        + " cluster to connect to.");
+    }
     return chosenHost;
   }
 

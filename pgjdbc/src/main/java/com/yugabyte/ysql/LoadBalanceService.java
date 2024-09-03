@@ -406,6 +406,37 @@ public class LoadBalanceService {
     return hostConnectedInetAddr;
   }
 
+  static boolean isRightNodeType(LoadBalance loadBalance, String nodeType, byte requestFlags) {
+    switch (loadBalance) {
+    case ANY:
+      LOGGER.fine("case ANY");
+      return true;
+    case ONLY_PRIMARY:
+      LOGGER.fine("case ONLY_PRIMARY, nodeType " + nodeType);
+      return nodeType.equalsIgnoreCase("primary");
+    case ONLY_RR:
+      LOGGER.fine("case ONLY_RR, nodeType " + nodeType);
+      return nodeType.equalsIgnoreCase("read_replica");
+    case PREFER_PRIMARY:
+      LOGGER.fine("case PREFER_PRIMARY, nodeType " + nodeType + " requestFlag " + requestFlags);
+      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+        return nodeType.equalsIgnoreCase("primary");
+      } else {
+        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
+      }
+    case PREFER_RR:
+      LOGGER.fine("case PREFER_RR, nodeType " + nodeType + " requestFlag " + requestFlags);
+      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+        return nodeType.equalsIgnoreCase("read_replica");
+      } else {
+        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
+      }
+    default:
+      LOGGER.fine("case default");
+      return false;
+    }
+  }
+
   public static class NodeInfo {
 
     private String host;
