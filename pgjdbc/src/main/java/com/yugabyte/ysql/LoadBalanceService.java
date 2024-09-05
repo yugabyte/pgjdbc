@@ -53,10 +53,13 @@ public class LoadBalanceService {
   /**
    * FOR TEST PURPOSE ONLY
    */
-  static synchronized void clear() {
+  static synchronized void clear() throws SQLException {
     LOGGER.warning("Clearing LoadBalanceService state for testing purposes");
     clusterInfoMap.clear();
-    controlConnection = null;
+    if (controlConnection != null) {
+      controlConnection.close();
+      controlConnection = null;
+    }
     lastRefreshTime = 0;
     forceRefreshOnce = false;
     useHostColumn = null;

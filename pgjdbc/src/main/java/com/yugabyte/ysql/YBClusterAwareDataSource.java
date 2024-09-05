@@ -24,16 +24,44 @@ public class YBClusterAwareDataSource extends PGSimpleDataSource {
 
   private String additionalEndPoints;
 
-  private void setLoadBalance(String value) {
+  /**
+   * @param value load balance value
+   * @see PGProperty#YB_LOAD_BALANCE
+   */
+  public void setLoadBalance(String value) {
     PGProperty.YB_LOAD_BALANCE.set(properties, value);
+  }
+
+  /**
+   * @return load balance value
+   * @see PGProperty#YB_LOAD_BALANCE
+   */
+  public boolean getLoadBalance() {
+    return PGProperty.YB_LOAD_BALANCE.getBoolean(properties);
   }
 
   public void setYbServersRefreshInterval(String value) {
     PGProperty.YB_SERVERS_REFRESH_INTERVAL.set(properties, value);
   }
 
+  /**
+   * @return yb_servers() refresh interval in seconds
+   * @see PGProperty#YB_LOAD_BALANCE
+   */
+  public int getYbServersRefreshInterval() {
+    return PGProperty.YB_SERVERS_REFRESH_INTERVAL.getIntNoCheck(properties);
+  }
+
   public void setTopologyKeys(String value) {
     PGProperty.YB_TOPOLOGY_KEYS.set(properties, value);
+  }
+
+  /**
+   * @return topology keys
+   * @see PGProperty#YB_LOAD_BALANCE
+   */
+  public String getTopologyKeys() {
+    return PGProperty.YB_TOPOLOGY_KEYS.get(properties);
   }
 
   // additionalEndpoints
