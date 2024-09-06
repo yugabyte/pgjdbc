@@ -21,7 +21,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class LoadBalanceProperties {
-  private static final String SIMPLE_LB = "simple";
   public static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
   public static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
   public static final String REFRESH_INTERVAL_KEY = "yb-servers-refresh-interval";
@@ -227,7 +226,7 @@ public class LoadBalanceProperties {
     default:
       LOGGER.warning("Invalid value for load-balance: " + value + ", ignoring it.");
     }
-    LOGGER.info("loadbalance value set to " + this.loadBalance);
+    LOGGER.fine("loadbalance value set to " + this.loadBalance);
   }
 
   private int parseAndGetValue(String propValue, int defaultValue, int maxValue) {
@@ -283,7 +282,7 @@ public class LoadBalanceProperties {
       // return base class conn manager.
       ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
       if (ld == null) {
-        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> No LB found for " + this.loadBalance + ", creating one ...");
+        LOGGER.fine("No LB found for " + this.loadBalance + ", creating one ...");
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
           if (ld == null) {
@@ -292,13 +291,13 @@ public class LoadBalanceProperties {
           }
         }
       } else {
-        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> LB found for " + this.loadBalance + ": " + ld);
+        LOGGER.fine("LB found for " + this.loadBalance + ": " + ld);
       }
     } else {
       String key = this.loadBalance.name() + "&" + placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase(Locale.ROOT);
       ld = CONNECTION_MANAGER_MAP.get(key);
       if (ld == null) {
-        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> No LB found for " + this.loadBalance + " and placements " + placements + " and fallback? " + explicitFallbackOnly + ", creating one ...");
+        LOGGER.fine("No LB found for " + this.loadBalance + " and placements " + placements + " and fallback? " + explicitFallbackOnly + ", creating one ...");
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(key);
           if (ld == null) {
@@ -307,7 +306,7 @@ public class LoadBalanceProperties {
           }
         }
       } else {
-        LOGGER.fine(">>>>>>>>>>>>>>>>>>>>>>>>>>> LB found for " + this.loadBalance + " and placements " + placements + ": " + ld);
+        LOGGER.fine("LB found for " + this.loadBalance + " and placements " + placements + ": " + ld);
       }
     }
     return ld;

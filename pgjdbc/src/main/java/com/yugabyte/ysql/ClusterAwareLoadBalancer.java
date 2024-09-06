@@ -13,17 +13,16 @@
 
 package com.yugabyte.ysql;
 
+import com.yugabyte.ysql.LoadBalanceService.LoadBalance;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
-import com.yugabyte.ysql.LoadBalanceService.LoadBalance;
-
 public class ClusterAwareLoadBalancer implements LoadBalancer {
-  protected static final Logger LOGGER =
-      Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
 
   private static volatile ClusterAwareLoadBalancer instance;
   private List<String> attempted = new ArrayList<>();
@@ -51,7 +50,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
           instance.refreshListSeconds =
               refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
                   refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
-          LOGGER.fine("Created a new cluster-aware LB instance with loadbalance = " + instance.loadBalance + " and refresh interval " + instance.refreshListSeconds + " seconds");
+          LOGGER.fine("Created a new cluster-aware LB instance with loadbalance = " +
+              instance.loadBalance + " and refresh interval " + instance.refreshListSeconds + " seconds");
         }
       }
     }
@@ -65,38 +65,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   @Override
   public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e,
       Byte requestFlags) {
-    return !attempted.contains(e.getKey()) && !e.getValue().isDown() && isRightNodeType(e.getValue().getNodeType(), requestFlags);
-  }
-
-  private boolean isRightNodeType(String nodeType, byte requestFlags) {
-    switch (loadBalance) {
-    case ANY:
-      LOGGER.fine("case ANY");
-      return true;
-    case ONLY_PRIMARY:
-      LOGGER.fine("case ONLY_PRIMARY, nodeType " + nodeType);
-      return nodeType.equalsIgnoreCase("primary");
-    case ONLY_RR:
-      LOGGER.fine("case ONLY_RR, nodeType " + nodeType);
-      return nodeType.equalsIgnoreCase("read_replica");
-    case PREFER_PRIMARY:
-      LOGGER.fine("case PREFER_PRIMARY, nodeType " + nodeType + " requestFlag " + requestFlags);
-      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
-        return nodeType.equalsIgnoreCase("primary");
-      } else {
-        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
-      }
-    case PREFER_RR:
-      LOGGER.fine("case PREFER_RR, nodeType " + nodeType + " requestFlag " + requestFlags);
-      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
-        return nodeType.equalsIgnoreCase("read_replica");
-      } else {
-        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
-      }
-    default:
-      LOGGER.fine("case default");
-      return false;
-    }
+    return !attempted.contains(e.getKey()) && !e.getValue().isDown()
+        && LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
   }
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
@@ -148,7 +118,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     if (chosenHost == null && (loadBalance == LoadBalance.ONLY_PRIMARY  || loadBalance == LoadBalance.ONLY_RR)) {
       throw new IllegalStateException("No node available in "
         + (loadBalance == LoadBalance.ONLY_PRIMARY ? "primary" : "read-replica")
-        + " cluster to connect to");
+        + " cluster to connect to.");
     }
     return chosenHost;
   }

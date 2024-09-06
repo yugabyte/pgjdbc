@@ -37,8 +37,8 @@ import org.postgresql.util.PSQLState;
 import org.postgresql.util.SharedTimer;
 import org.postgresql.util.URLCoder;
 
-import com.yugabyte.ysql.LoadBalanceService;
 import com.yugabyte.ysql.LoadBalanceProperties;
+import com.yugabyte.ysql.LoadBalanceService;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.io.IOException;

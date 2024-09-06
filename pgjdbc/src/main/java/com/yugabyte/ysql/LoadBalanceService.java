@@ -4,7 +4,6 @@ import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_FAILED_HOST_TTL_SE
 import static com.yugabyte.ysql.LoadBalanceProperties.FAILED_HOST_RECONNECT_DELAY_SECS_KEY;
 import static org.postgresql.Driver.hostSpecs;
 
-import org.postgresql.PGProperty;
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.GT;
 import org.postgresql.util.HostSpec;
@@ -28,13 +27,11 @@ import java.util.logging.Logger;
 
 public class LoadBalanceService {
 
-  private static final ConcurrentHashMap<String, NodeInfo> clusterInfoMap =
-      new ConcurrentHashMap<>();
+  private static final ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
   static final byte STRICT_PREFERENCE = 0b00000001;
   private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
-  protected static final Logger LOGGER =
-      Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static long lastRefreshTime;
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
@@ -102,8 +99,7 @@ public class LoadBalanceService {
       String region = rs.getString("region");
       String zone = rs.getString("zone");
       String nodeType = rs.getString("node_type");
-      NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) :
-          new NodeInfo();
+      NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
         nodeInfo.publicIP = publicHost;
@@ -114,20 +110,16 @@ public class LoadBalanceService {
         try {
           nodeInfo.port = Integer.valueOf(port);
         } catch (NumberFormatException nfe) {
-          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 " +
-              "instead.");
+          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 instead.");
           nodeInfo.port = 5433;
         }
-        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY,
-            DEFAULT_FAILED_HOST_TTL_SECONDS);
+        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay" +
-                "-secs (" + failedHostTTL + "s) has elapsed");
+            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has elapsed");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay" +
-                "-secs (" + failedHostTTL + "s) has not elapsed");
+            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
           }
         }
       }
@@ -355,8 +347,7 @@ public class LoadBalanceService {
         } catch (SQLException ex) {
           if (refreshFailed) {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
-            String failed =
-                ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
+            String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
@@ -410,32 +401,27 @@ public class LoadBalanceService {
   }
 
   static boolean isRightNodeType(LoadBalance loadBalance, String nodeType, byte requestFlags) {
+    LOGGER.fine("loadBalance " + loadBalance + ", nodeType: " + nodeType + ", requestFlags: " + requestFlags);
     switch (loadBalance) {
     case ANY:
-      LOGGER.fine("case ANY");
       return true;
     case ONLY_PRIMARY:
-      LOGGER.fine("case ONLY_PRIMARY, nodeType " + nodeType);
       return nodeType.equalsIgnoreCase("primary");
     case ONLY_RR:
-      LOGGER.fine("case ONLY_RR, nodeType " + nodeType);
       return nodeType.equalsIgnoreCase("read_replica");
     case PREFER_PRIMARY:
-      LOGGER.fine("case PREFER_PRIMARY, nodeType " + nodeType + " requestFlag " + requestFlags);
       if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
         return nodeType.equalsIgnoreCase("primary");
       } else {
         return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
       }
     case PREFER_RR:
-      LOGGER.fine("case PREFER_RR, nodeType " + nodeType + " requestFlag " + requestFlags);
       if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
         return nodeType.equalsIgnoreCase("read_replica");
       } else {
         return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
       }
     default:
-      LOGGER.fine("case default");
       return false;
     }
   }
