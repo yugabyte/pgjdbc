@@ -323,7 +323,7 @@ public class LoadBalanceService {
 
   /**
    * @param loadBalanceProperties
-   * @param lb                    LoadBalancer instance
+   * @param lb LoadBalancer instance
    * @param user
    * @param dbName
    * @return true if the refresh was not required or if it was successful.

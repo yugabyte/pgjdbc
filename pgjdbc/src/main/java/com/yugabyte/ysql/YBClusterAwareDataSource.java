@@ -46,7 +46,7 @@ public class YBClusterAwareDataSource extends PGSimpleDataSource {
 
   /**
    * @return yb_servers() refresh interval in seconds
-   * @see PGProperty#YB_LOAD_BALANCE
+   * @see PGProperty#YB_SERVERS_REFRESH_INTERVAL
    */
   public int getYbServersRefreshInterval() {
     return PGProperty.YB_SERVERS_REFRESH_INTERVAL.getIntNoCheck(properties);
@@ -58,10 +58,38 @@ public class YBClusterAwareDataSource extends PGSimpleDataSource {
 
   /**
    * @return topology keys
-   * @see PGProperty#YB_LOAD_BALANCE
+   * @see PGProperty#YB_TOPOLOGY_KEYS
    */
   public String getTopologyKeys() {
     return PGProperty.YB_TOPOLOGY_KEYS.get(properties);
+  }
+
+  /**
+   * @param value limit fallback to nodes in topology keys only
+   * @see PGProperty#YB_FALLBACK_TO_TOPOLOGY_KEYS_ONLY
+   */
+  public void setFallbackToTopologyKeysOnly(String value) {
+    PGProperty.YB_FALLBACK_TO_TOPOLOGY_KEYS_ONLY.set(properties, value);
+  }
+
+  /**
+   * @return boolean
+   * @see PGProperty#YB_FALLBACK_TO_TOPOLOGY_KEYS_ONLY
+   */
+  public boolean isFallbackToTopologyKeysOnly() {
+    return PGProperty.YB_FALLBACK_TO_TOPOLOGY_KEYS_ONLY.getBoolean(properties);
+  }
+
+  public void setFailedHostReconnectDelaySecs(String value) {
+    PGProperty.YB_FAILED_HOST_RECONNECT_DELAY_SECS.set(properties, value);
+  }
+
+  /**
+   * @return delay in seconds
+   * @see PGProperty#YB_FAILED_HOST_RECONNECT_DELAY_SECS
+   */
+  public int getFailedHostReconnectDelaySecs() {
+    return PGProperty.YB_FAILED_HOST_RECONNECT_DELAY_SECS.getIntNoCheck(properties);
   }
 
   // additionalEndpoints

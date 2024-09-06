@@ -131,8 +131,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     boolean isRightNode = LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
     boolean isAttempted = attempted.contains(e.getKey());
     boolean isDown = e.getValue().isDown();
-    LOGGER.fine(e.getKey() + " has required placement? " + found + ", isDown? "
-        + isDown + ", attempted? " + isAttempted + ", isRightNodeType? " + isRightNode);
+    LOGGER.fine(e.getKey() + " has currentPlacementIndex " + currentPlacementIndex + ", required placement? "
+        + found + ", isDown? " + isDown + ", attempted? " + isAttempted + ", isRightNodeType? " + isRightNode);
     return found
         && !isAttempted
         && !isDown
