@@ -20,9 +20,17 @@ This is similar to 'Cluster Awareness' but uses those servers which are part of 
 
 ### Connection Properties added for load balancing
 
-- _load-balance_   - It expects **true/false** as its possible values. In YBClusterAwareDataSource load balancing is true by default. However when using the DriverManager.getConnection() API the 'load-balance' property needs to be set to 'true'.
+- _load-balance_ - Starting with version 42.3.5-yb-7, it expects one of **false, any (same as true), only-primary, only-rr, prefer-primary and prefer-rr** as its possible values. In `YBClusterAwareDataSource` load balancing is `true` by default. However, when using the `DriverManager.getConnection()` API the 'load-balance' property is considered to be `false` by default.
+  - _false_ - No connection load balancing. Behaviour is similar to vanilla PGJDBC driver
+  - _any_ - Same as value _true_. Distribute connections equally across all nodes in the cluster, irrespective of its type (`primary` or `read-replica`)
+  - _only-primary_ - Create connections equally across only the primary nodes of the cluster
+  - _only-rr_ - Create connections equally across only the read-replica nodes of the cluster
+  - _prefer-primary_ - Create connections equally across primary cluster nodes. If none available, on any node in the cluster including read replica nodes
+  - _prefer-rr_ - Create connections equally across read replica nodes of the cluster. If none available, on any node in the cluster including primary cluster nodes
 - _topology-keys_  - It takes a comma separated geo-location values. A single geo-location can be given as 'cloud.region.zone'. Multiple geo-locations too can be specified, separated by comma (`,`).
-- _yb-servers-refresh-interval_ - Time interval, in seconds, between two attempts to refresh the information about cluster nodes. Default is 300. Valid values are integers between 0 and 600. Value 0 means refresh for each connection request. Any value outside this range is ignored and the default is used.
+- _yb-servers-refresh-interval_ - Time interval, in seconds, between two attempts to refresh the information about cluster nodes. Default is 300 seconds. Valid values are integers between 0 and 600. Value 0 means refresh for each connection request. Any value outside this range is ignored and the default is used.
+- _fallback-to-topology-keys-only_ - Decides if the driver can fall back to nodes outside of the given placements for new connections, if the nodes in the given placements are not available. Value `true` means stick to explicitly given placements for fallback, else fail. Value `false` means fall back to entire cluster nodes when nodes in the given placements are unavailable. Default is `false`. It is ignored if `topology-keys` is not specified or `load-balance` is set to either `prefer-primary` or `prefer-rr`.
+- _failed-host-reconnect-delay-secs_ - When the driver cannot connect to a server, it marks it as _failed_ with a timestamp. Later, whenever it refreshes the server list via `yb_servers()`, if it sees the failed server in the response, it marks the server as UP only if the time specified via this property has elapsed since the time it was last marked as a failed host. Default is 5 seconds.
 
 Please refer to the [Use the Driver](#Use the Driver) section for examples.
 
@@ -30,16 +38,16 @@ Please refer to the [Use the Driver](#Use the Driver) section for examples.
 
 ### From Maven
 
-Either add the following lines to your maven project in pom.xml file (Use the latest version available),
+Add the following lines to your maven project in pom.xml file (Use the latest version available),
 ```
 <dependency>
   <groupId>com.yugabyte</groupId>
   <artifactId>jdbc-yugabytedb</artifactId>
-  <version>42.3.5-yb-6</version>
+  <version>${driver.version}</version>
 </dependency>
 ```
 
-or you can visit to this link for the latest version of dependency: https://search.maven.org/artifact/com.yugabyte/jdbc-yugabytedb
+You can visit to this link for the latest version of the driver: https://search.maven.org/artifact/com.yugabyte/jdbc-yugabytedb
 
 ### Build locally
 
@@ -69,7 +77,7 @@ or you can visit to this link for the latest version of dependency: https://sear
     <dependency>
         <groupId>com.yugabyte</groupId>
         <artifactId>jdbc-yugabytedb</artifactId>
-        <version>42.3.5-yb-6</version>
+        <version>${driver.version}</version>
     </dependency> 
     ```
 > **Note:** You need to have installed 2.7.2.0-b0 or above version of YugabyteDB on your system for load balancing to work.
@@ -78,18 +86,24 @@ or you can visit to this link for the latest version of dependency: https://sear
 
 - Passing new connection properties for load balancing in connection url or properties bag
 
-  For uniform load balancing across all the server you just need to specify the _load-balance=true_ property in the url.
+  For uniform load balancing across all the servers you just need to specify the _load-balance_ property in the url:
     ```
-    String yburl = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?user=yugabyte&password=yugabyte&load-balance=true";
+    String yburl = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?user=yugabyte&password=yugabyte&load-balance=any";
     DriverManager.getConnection(yburl);
     ```
 
-  For specifying topology keys you need to set the additional property with a valid comma separated value.
-
+  For specifying topology keys you need to set the additional property with a valid comma separated value:
     ```
     String yburl = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?user=yugabyte&password=yugabyte&load-balance=true&topology-keys=cloud1.region1.zone1,cloud1.region1.zone2";
     DriverManager.getConnection(yburl);
     ```
+
+  If you have a read-replica cluster in your universe and want to connect your app strictly to the read-replica nodes in the universe (for example, because its a read-only app and you don't want to affect primary nodes which are servicing write-workloads):
+    ```
+    String yburl = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?user=yugabyte&password=yugabyte&load-balance=only-rr";
+    DriverManager.getConnection(yburl);
+    ```
+  If no read-replica nodes are available above, the driver will attempt to connect to the endpoint(s) given in the url; `127.0.0.1` in this case.
 
 ### Specifying fallback zones
 
