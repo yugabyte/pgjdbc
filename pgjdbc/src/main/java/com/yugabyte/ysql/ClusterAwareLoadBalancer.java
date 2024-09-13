@@ -13,7 +13,7 @@
 
 package com.yugabyte.ysql;
 
-import com.yugabyte.ysql.LoadBalanceService.LoadBalance;
+import com.yugabyte.ysql.LoadBalanceService.LoadBalanceType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +26,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   private static volatile ClusterAwareLoadBalancer instance;
   private List<String> attempted = new ArrayList<>();
-  private final LoadBalanceService.LoadBalance loadBalance;
+  private final LoadBalanceService.LoadBalanceType loadBalance;
   private byte requestFlags;
 
   @Override
@@ -36,12 +36,12 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalance lb, int refreshInterval) {
+  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval) {
     this.loadBalance = lb;
     this.refreshListSeconds = refreshInterval;
   }
 
-  public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalance lb,
+  public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalanceType lb,
       int refreshListSeconds) {
     if (instance == null) {
       synchronized (ClusterAwareLoadBalancer.class) {
@@ -59,12 +59,14 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   }
 
   public String toString() {
-    return this.getClass().getSimpleName() + ": loadBalance = " + loadBalance + ", refreshInterval = " + refreshListSeconds;
+    return this.getClass().getSimpleName() + ": loadBalance = " +
+      loadBalance + ", refreshInterval = " + refreshListSeconds;
   }
 
   @Override
   public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e,
       Byte requestFlags) {
+    // e.getKey() is the hostname
     return !attempted.contains(e.getKey()) && !e.getValue().isDown()
         && LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
   }
@@ -109,15 +111,17 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
         LoadBalanceService.incrementConnectionCount(chosenHost);
         break; // We got a host
       } else if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+        // Relax the STRICT_PREFERENCE condition and consider other node types
         requestFlags = (byte) 0;
       } else {
         break; // No more hosts to try
       }
     }
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
-    if (chosenHost == null && (loadBalance == LoadBalance.ONLY_PRIMARY  || loadBalance == LoadBalance.ONLY_RR)) {
+    if (chosenHost == null && (loadBalance == LoadBalanceType.ONLY_PRIMARY ||
+        loadBalance == LoadBalanceType.ONLY_RR)) {
       throw new IllegalStateException("No node available in "
-        + (loadBalance == LoadBalance.ONLY_PRIMARY ? "primary" : "read-replica")
+        + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" : "read-replica")
         + " cluster to connect to.");
     }
     return chosenHost;

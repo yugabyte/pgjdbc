@@ -25,14 +25,14 @@ This is similar to 'Cluster Awareness' but uses those servers which are part of 
   - _any_ - Same as value _true_. Distribute connections equally across all nodes in the cluster, irrespective of its type (`primary` or `read-replica`)
   - _only-primary_ - Create connections equally across only the primary nodes of the cluster
   - _only-rr_ - Create connections equally across only the read-replica nodes of the cluster
-  - _prefer-primary_ - Create connections equally across primary cluster nodes. If none available, on any node in the cluster including read replica nodes
-  - _prefer-rr_ - Create connections equally across read replica nodes of the cluster. If none available, on any node in the cluster including primary cluster nodes
+  - _prefer-primary_ - Create connections equally across primary cluster nodes. If none available, on any available read replica node in the cluster
+  - _prefer-rr_ - Create connections equally across read replica nodes of the cluster. If none available, on any available primary cluster node
 - _topology-keys_  - It takes a comma separated geo-location values. A single geo-location can be given as 'cloud.region.zone'. Multiple geo-locations too can be specified, separated by comma (`,`).
 - _yb-servers-refresh-interval_ - Time interval, in seconds, between two attempts to refresh the information about cluster nodes. Default is 300 seconds. Valid values are integers between 0 and 600. Value 0 means refresh for each connection request. Any value outside this range is ignored and the default is used.
 - _fallback-to-topology-keys-only_ - Decides if the driver can fall back to nodes outside of the given placements for new connections, if the nodes in the given placements are not available. Value `true` means stick to explicitly given placements for fallback, else fail. Value `false` means fall back to entire cluster nodes when nodes in the given placements are unavailable. Default is `false`. It is ignored if `topology-keys` is not specified or `load-balance` is set to either `prefer-primary` or `prefer-rr`.
 - _failed-host-reconnect-delay-secs_ - When the driver cannot connect to a server, it marks it as _failed_ with a timestamp. Later, whenever it refreshes the server list via `yb_servers()`, if it sees the failed server in the response, it marks the server as UP only if the time specified via this property has elapsed since the time it was last marked as a failed host. Default is 5 seconds.
 
-Please refer to the [Use the Driver](#Use the Driver) section for examples.
+Please refer to the [Use the Driver](#use-the-driver) section for examples.
 
 ### Get the Driver
 

@@ -20,7 +20,7 @@ import static com.yugabyte.ysql.LoadBalanceProperties.PREFERENCE_DELIMITER;
 import static com.yugabyte.ysql.LoadBalanceProperties.REFRESH_INTERVAL_KEY;
 import static com.yugabyte.ysql.LoadBalanceProperties.TOPOLOGY_AWARE_PROPERTY_KEY;
 
-import com.yugabyte.ysql.LoadBalanceService.LoadBalance;
+import com.yugabyte.ysql.LoadBalanceService.LoadBalanceType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +37,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
    * Holds the value of topology-keys specified.
    */
   private final String placements;
-  private final LoadBalanceService.LoadBalance loadBalance;
+  private final LoadBalanceService.LoadBalanceType loadBalance;
 
   private long lastRequestTime;
   /**
@@ -56,7 +56,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private boolean explicitFallbackOnly = false;
   private byte requestFlags;
 
-  public TopologyAwareLoadBalancer(LoadBalance lb, String placementValues, boolean onlyExplicitFallback) {
+  public TopologyAwareLoadBalancer(LoadBalanceType lb, String placementValues, boolean onlyExplicitFallback) {
     loadBalance = lb;
     placements = placementValues;
     explicitFallbackOnly = onlyExplicitFallback;
@@ -122,8 +122,14 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e,
           Byte requestFlags) {
     Set<LoadBalanceService.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
+    // found is true when:
+    // we are searching for nodes in entire cluster AND fallback-to-topology-keys-only is false
+    // OR
+    // we are searching for nodes in entire cluster AND load-balance is set to prefer-*
+    // OR
+    // allowed placements contain the node's placement
     boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX
-      && (!explicitFallbackOnly || loadBalance == LoadBalance.PREFER_PRIMARY || loadBalance == LoadBalance.PREFER_RR))
+      && (!explicitFallbackOnly || loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR))
       || (set != null && e.getValue().getPlacement().isContainedIn(set));
     boolean isRightNode = LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
     boolean isAttempted = attempted.contains(e.getKey());
@@ -184,6 +190,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       } else {
         LOGGER.fine("chosenHost is null for placement level " + currentPlacementIndex
             + ", allowedPlacements: " + allowedPlacements);
+        // No host found. Go to the next placement level.
         currentPlacementIndex += 1;
         while (allowedPlacements.get(currentPlacementIndex) == null && currentPlacementIndex > 0) {
           currentPlacementIndex += 1;
@@ -193,8 +200,11 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
           }
         }
         if (currentPlacementIndex == 0) {
-          if (requestFlags == LoadBalanceService.STRICT_PREFERENCE && (loadBalance == LoadBalance.PREFER_PRIMARY || loadBalance == LoadBalance.PREFER_RR)) {
-            LOGGER.fine("Even rest of cluster did not have a host for us, So relax the node type condition for prefer-* and try again once");
+          // No host found in entire cluster. Relax the STRICT_PREFERENCE if load-balance is prefer-*
+          if (requestFlags == LoadBalanceService.STRICT_PREFERENCE &&
+            (loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR)) {
+            LOGGER.fine("Even rest of cluster did not have a host for us." +
+              " So relax the node type condition for prefer-* and try again once");
             currentPlacementIndex = REST_OF_CLUSTER_INDEX;
             requestFlags = (byte) 0;
           } else {
@@ -206,10 +216,15 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     }
     lastRequestTime = System.currentTimeMillis();
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
-    if (chosenHost == null && (loadBalance == LoadBalance.ONLY_PRIMARY  || loadBalance == LoadBalance.ONLY_RR || (loadBalance == LoadBalance.ANY && explicitFallbackOnly))) {
-      throw new IllegalStateException("No node available in the given placements for the "
-        + (loadBalance == LoadBalance.ONLY_PRIMARY ? "primary" : (loadBalance == LoadBalance.ONLY_RR ? "read-replica" : "entire"))
-        + " cluster to connect to.");
+    // Throw error if no host is found AND load-balance=only-* OR
+    // load-balance=any AND fallback-to-topology-keys-only is true
+    if (chosenHost == null &&
+        (loadBalance == LoadBalanceType.ONLY_PRIMARY || loadBalance == LoadBalanceType.ONLY_RR ||
+        (loadBalance == LoadBalanceType.ANY && explicitFallbackOnly))) {
+      throw new IllegalStateException("No node available in the given placements for the " +
+        (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" :
+        (loadBalance == LoadBalanceType.ONLY_RR ? "read-replica" : "entire")) +
+        " cluster to connect to.");
     }
     return chosenHost;
   }

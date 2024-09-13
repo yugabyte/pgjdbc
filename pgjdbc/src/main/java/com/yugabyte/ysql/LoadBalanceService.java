@@ -400,7 +400,7 @@ public class LoadBalanceService {
     return hostConnectedInetAddr;
   }
 
-  static boolean isRightNodeType(LoadBalance loadBalance, String nodeType, byte requestFlags) {
+  static boolean isRightNodeType(LoadBalanceType loadBalance, String nodeType, byte requestFlags) {
     LOGGER.fine("loadBalance " + loadBalance + ", nodeType: " + nodeType + ", requestFlags: " + requestFlags);
     switch (loadBalance) {
     case ANY:
@@ -526,7 +526,7 @@ public class LoadBalanceService {
     }
   }
 
-  public enum LoadBalance {
+  public enum LoadBalanceType {
     FALSE, ANY, PREFER_PRIMARY, PREFER_RR, ONLY_PRIMARY, ONLY_RR
   }
 }

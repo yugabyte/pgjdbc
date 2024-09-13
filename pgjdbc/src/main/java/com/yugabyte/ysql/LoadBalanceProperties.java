@@ -65,7 +65,7 @@ public class LoadBalanceProperties {
       new ConcurrentHashMap<>();
   private final String originalUrl;
   private final Properties originalProperties;
-  private LoadBalanceService.LoadBalance loadBalance;
+  private LoadBalanceService.LoadBalanceType loadBalance;
   private final String ybURL;
   private String placements = null;
   private int refreshInterval = -1;
@@ -206,22 +206,22 @@ public class LoadBalanceProperties {
     switch (value.toLowerCase(Locale.ROOT)) {
     case "true":
     case "any":
-      this.loadBalance = LoadBalanceService.LoadBalance.ANY;
+      this.loadBalance = LoadBalanceService.LoadBalanceType.ANY;
       break;
     case "prefer-primary":
-      this.loadBalance = LoadBalanceService.LoadBalance.PREFER_PRIMARY;
+      this.loadBalance = LoadBalanceService.LoadBalanceType.PREFER_PRIMARY;
       break;
     case "prefer-rr":
-      this.loadBalance = LoadBalanceService.LoadBalance.PREFER_RR;
+      this.loadBalance = LoadBalanceService.LoadBalanceType.PREFER_RR;
       break;
     case "only-primary":
-      this.loadBalance = LoadBalanceService.LoadBalance.ONLY_PRIMARY;
+      this.loadBalance = LoadBalanceService.LoadBalanceType.ONLY_PRIMARY;
       break;
     case "only-rr":
-      this.loadBalance = LoadBalanceService.LoadBalance.ONLY_RR;
+      this.loadBalance = LoadBalanceService.LoadBalanceType.ONLY_RR;
       break;
     case "false":
-      this.loadBalance = LoadBalanceService.LoadBalance.FALSE;
+      this.loadBalance = LoadBalanceService.LoadBalanceType.FALSE;
       break;
     default:
       LOGGER.warning("Invalid value for load-balance: " + value + ", ignoring it.");
@@ -253,7 +253,7 @@ public class LoadBalanceProperties {
   }
 
   public boolean isLoadBalanceEnabled() {
-    return this.loadBalance != LoadBalanceService.LoadBalance.FALSE;
+    return this.loadBalance != LoadBalanceService.LoadBalanceType.FALSE;
   }
 
   public String getPlacements() {
