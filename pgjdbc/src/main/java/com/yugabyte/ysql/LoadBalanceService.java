@@ -28,6 +28,7 @@ import java.util.logging.Logger;
 public class LoadBalanceService {
 
   private static final ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
+  static final byte STRICT_PREFERENCE = 0b00000001;
   private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
@@ -49,10 +50,13 @@ public class LoadBalanceService {
   /**
    * FOR TEST PURPOSE ONLY
    */
-  static synchronized void clear() {
+  static synchronized void clear() throws SQLException {
     LOGGER.warning("Clearing LoadBalanceService state for testing purposes");
     clusterInfoMap.clear();
-    controlConnection = null;
+    if (controlConnection != null) {
+      controlConnection.close();
+      controlConnection = null;
+    }
     lastRefreshTime = 0;
     forceRefreshOnce = false;
     useHostColumn = null;
@@ -94,12 +98,15 @@ public class LoadBalanceService {
       String cloud = rs.getString("cloud");
       String region = rs.getString("region");
       String zone = rs.getString("zone");
+      String nodeType = rs.getString("node_type");
       NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
         nodeInfo.publicIP = publicHost;
         publicIPsGivenForAll = !publicHost.isEmpty();
         nodeInfo.placement = new CloudPlacement(cloud, region, zone);
+        LOGGER.fine("Setting node_type to " + nodeType + " for host " + host);
+        nodeInfo.nodeType = nodeType;
         try {
           nodeInfo.port = Integer.valueOf(port);
         } catch (NumberFormatException nfe) {
@@ -176,11 +183,11 @@ public class LoadBalanceService {
     return info == null ? 0 : info.connectionCount;
   }
 
-  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy) {
+  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy, Byte requestFlags) {
     ArrayList<String> list = new ArrayList<>();
     Set<Map.Entry<String, NodeInfo>> set = clusterInfoMap.entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
-      if (policy.isHostEligible(e)) {
+      if (policy.isHostEligible(e, requestFlags)) {
         list.add(e.getKey());
       } else {
         LOGGER.finest("Skipping " + e + " because it is not eligible.");
@@ -211,8 +218,8 @@ public class LoadBalanceService {
     if (info != null) {
       synchronized (info) {
         if (info.connectionCount < 0) {
-          info.connectionCount = 0;
           LOGGER.fine("Resetting connection count for " + host + " to zero from " + info.connectionCount);
+          info.connectionCount = 0;
         }
         info.connectionCount += 1;
         return true;
@@ -240,7 +247,7 @@ public class LoadBalanceService {
   public static Connection getConnection(String url, Properties properties, String user,
       String database, LoadBalanceProperties lbProperties, ArrayList<String> timedOutHosts) {
     // Cleanup extra properties used for load balancing?
-    if (lbProperties.hasLoadBalance()) {
+    if (lbProperties.isLoadBalanceEnabled()) {
       Connection conn = getConnection(lbProperties, properties, user, database, timedOutHosts);
       if (conn != null) {
         return conn;
@@ -307,7 +314,6 @@ public class LoadBalanceService {
   }
 
   /**
-   *
    * @param loadBalanceProperties
    * @param lb LoadBalancer instance
    * @param user
@@ -319,14 +325,16 @@ public class LoadBalanceService {
     if (needsRefresh(lb.getRefreshListSeconds())) {
       Properties props = loadBalanceProperties.getOriginalProperties();
       String url = loadBalanceProperties.getStrippedURL();
-      HostSpec[] hspec = hostSpecs(props);
+      Properties properties = new Properties(props);
+      properties.setProperty("socketTimeout", "15");
+      HostSpec[] hspec = hostSpecs(properties);
 
       ArrayList<String> hosts = getAllAvailableHosts(new ArrayList<>());
       while (true) {
         boolean refreshFailed = false;
         try {
           if (controlConnection == null || controlConnection.isClosed()) {
-            controlConnection = new PgConnection(hspec, user, dbName, props, url);
+            controlConnection = new PgConnection(hspec, user, dbName, properties, url);
           }
           try {
             refresh(controlConnection, lb.getRefreshListSeconds());
@@ -392,12 +400,39 @@ public class LoadBalanceService {
     return hostConnectedInetAddr;
   }
 
-  static class NodeInfo {
+  static boolean isRightNodeType(LoadBalanceType loadBalance, String nodeType, byte requestFlags) {
+    LOGGER.fine("loadBalance " + loadBalance + ", nodeType: " + nodeType + ", requestFlags: " + requestFlags);
+    switch (loadBalance) {
+    case ANY:
+      return true;
+    case ONLY_PRIMARY:
+      return nodeType.equalsIgnoreCase("primary");
+    case ONLY_RR:
+      return nodeType.equalsIgnoreCase("read_replica");
+    case PREFER_PRIMARY:
+      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+        return nodeType.equalsIgnoreCase("primary");
+      } else {
+        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
+      }
+    case PREFER_RR:
+      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+        return nodeType.equalsIgnoreCase("read_replica");
+      } else {
+        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
+      }
+    default:
+      return false;
+    }
+  }
+
+  public static class NodeInfo {
 
     private String host;
     private int port;
     private CloudPlacement placement;
     private String publicIP;
+    private String nodeType;
     private int connectionCount;
     private boolean isDown;
     private long isDownSince;
@@ -428,6 +463,14 @@ public class LoadBalanceService {
 
     public long getIsDownSince() {
       return isDownSince;
+    }
+
+    public String getNodeType() {
+      return nodeType;
+    }
+
+    public void setNodeType(String nodeType) {
+      this.nodeType = nodeType;
     }
   }
 
@@ -481,5 +524,9 @@ public class LoadBalanceService {
     public String toString() {
       return "CloudPlacement: " + cloud + "." + region + "." + zone;
     }
+  }
+
+  public enum LoadBalanceType {
+    FALSE, ANY, PREFER_PRIMARY, PREFER_RR, ONLY_PRIMARY, ONLY_RR
   }
 }
