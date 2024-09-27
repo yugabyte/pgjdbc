@@ -57,7 +57,11 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private byte requestFlags;
 
   public TopologyAwareLoadBalancer(LoadBalanceType lb, String placementValues, boolean onlyExplicitFallback) {
-    loadBalance = lb;
+    if (lb != null) {
+      loadBalance = lb;
+    } else {
+      loadBalance = LoadBalanceType.FALSE;
+    }
     placements = placementValues;
     explicitFallbackOnly = onlyExplicitFallback;
     refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);

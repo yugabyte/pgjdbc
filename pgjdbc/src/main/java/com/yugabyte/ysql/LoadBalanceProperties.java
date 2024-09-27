@@ -65,7 +65,7 @@ public class LoadBalanceProperties {
       new ConcurrentHashMap<>();
   private final String originalUrl;
   private final Properties originalProperties;
-  private LoadBalanceService.LoadBalanceType loadBalance;
+  private LoadBalanceService.LoadBalanceType loadBalance = LoadBalanceService.LoadBalanceType.FALSE;
   private final String ybURL;
   private String placements = null;
   private int refreshInterval = -1;
