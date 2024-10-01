@@ -37,7 +37,11 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
   public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval) {
-    this.loadBalance = lb;
+    if (lb != null) {
+      this.loadBalance = lb;
+    } else {
+      this.loadBalance = LoadBalanceType.FALSE;
+    }
     this.refreshListSeconds = refreshInterval;
   }
 
