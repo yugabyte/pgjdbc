@@ -40,10 +40,10 @@ includeBuild("build-logic")
 // Renovate treats names as dependency coordinates when vararg include(...) is used, so we have separate include calls here
 // include("benchmarks")
 // include("pgjdbc-osgi-test")
-include("postgresql")
+include("jdbc-yugabytedb")
 include("bom")
 
-project(":postgresql").projectDir = file("pgjdbc")
+project(":jdbc-yugabytedb").projectDir = file("pgjdbc")
 
 // See https://github.com/gradle/gradle/issues/1348#issuecomment-284758705 and
 // https://github.com/gradle/gradle/issues/5321#issuecomment-387561204
