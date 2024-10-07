@@ -248,7 +248,7 @@ public class LoadBalanceService {
       LoadBalanceProperties lbProperties, ArrayList<String> timedOutHosts) {
     // Cleanup extra properties used for load balancing?
     if (lbProperties.isLoadBalanceEnabled()) {
-      Connection conn = getConnection(lbProperties, properties, user, database, timedOutHosts);
+      Connection conn = getConnection(lbProperties, properties, timedOutHosts);
       if (conn != null) {
         return conn;
       }
@@ -316,8 +316,6 @@ public class LoadBalanceService {
   /**
    * @param loadBalanceProperties
    * @param lb LoadBalancer instance
-   * @param user
-   * @param dbName
    * @return true if the refresh was not required or if it was successful.
    */
   private static synchronized boolean checkAndRefresh(LoadBalanceProperties loadBalanceProperties,
@@ -334,7 +332,7 @@ public class LoadBalanceService {
         boolean refreshFailed = false;
         try {
           if (controlConnection == null || controlConnection.isClosed()) {
-            controlConnection = new PgConnection(hspec, user, dbName, properties, url);
+            controlConnection = new PgConnection(hspec, properties, url);
           }
           try {
             refresh(controlConnection, lb.getRefreshListSeconds());
