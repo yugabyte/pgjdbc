@@ -268,7 +268,7 @@ karaf {
     features.apply {
         xsdVersion = "1.5.0"
         feature(closureOf<com.github.lburgazzoli.gradle.plugin.karaf.features.model.FeatureDescriptor> {
-            name = "postgresql"
+            name = "jdbc-yugabytedb"
             description = "PostgreSQL JDBC driver karaf feature"
             version = project.version.toString()
             details = "Java JDBC 4.2 (JRE 8+) driver for PostgreSQL database"
