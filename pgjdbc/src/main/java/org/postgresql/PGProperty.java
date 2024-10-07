@@ -576,6 +576,17 @@ public enum PGProperty {
       "300",
       "Refresh the list of nodes after given interval in seconds"),
 
+  YB_FALLBACK_TO_TOPOLOGY_KEYS_ONLY(
+      "fallback-to-topology-keys-only",
+      "false",
+      "Limit the connection attempts to the nodes in the given topology only"),
+
+  YB_FAILED_HOST_RECONNECT_DELAY_SECS(
+      "failed-host-reconnect-delay-secs",
+      "5",
+      "Delay the attempt to create a connection to a node from yb_servers()"
+          + " response till this time elapses from the time it was marked as down"),
+
   /**
    * Configure optimization to enable batch insert re-writing.
    */

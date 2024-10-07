@@ -13,9 +13,11 @@
 
 package com.yugabyte.ysql;
 
-import static com.yugabyte.ysql.LoadBalanceProperties.*;
+import com.yugabyte.ysql.LoadBalanceService.LoadBalanceType;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
@@ -23,7 +25,9 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
 
   private static volatile ClusterAwareLoadBalancer instance;
-  List<String> attempted = new ArrayList<>();
+  private List<String> attempted = new ArrayList<>();
+  private final LoadBalanceService.LoadBalanceType loadBalance;
+  private byte requestFlags;
 
   @Override
   public int getRefreshListSeconds() {
@@ -32,66 +36,94 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer() {
+  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval) {
+    this.loadBalance = lb;
+    this.refreshListSeconds = refreshInterval;
   }
 
-  public static ClusterAwareLoadBalancer getInstance(int refreshListSeconds) {
+  public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalanceType lb,
+      int refreshListSeconds) {
     if (instance == null) {
       synchronized (ClusterAwareLoadBalancer.class) {
         if (instance == null) {
-          instance = new ClusterAwareLoadBalancer();
+          instance = new ClusterAwareLoadBalancer(lb, refreshListSeconds);
           instance.refreshListSeconds =
               refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
                   refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
-          LOGGER.fine("Created a new cluster-aware LB instance with refresh" +
-              " interval " + instance.refreshListSeconds + " seconds");
+          LOGGER.fine("Created a new cluster-aware LB instance with loadbalance = " +
+              instance.loadBalance + " and refresh interval " + instance.refreshListSeconds + " seconds");
         }
       }
     }
     return instance;
   }
 
-  @Override
-  public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e) {
-    return !attempted.contains(e.getKey()) && !e.getValue().isDown();
+  public String toString() {
+    return this.getClass().getSimpleName() + ": loadBalance = " +
+      loadBalance + ", refreshInterval = " + refreshListSeconds;
   }
 
-  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts) {
-    LOGGER.fine("failedHosts: " + failedHosts + ", timedOutHosts: " + timedOutHosts);
+  @Override
+  public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e,
+      Byte requestFlags) {
+    // e.getKey() is the hostname
+    return !attempted.contains(e.getKey()) && !e.getValue().isDown()
+        && LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
+  }
+
+  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
+      ArrayList<String> timedOutHosts) {
     attempted = failedHosts;
     if (timedOutHosts != null) {
       attempted.addAll(timedOutHosts);
     }
-    ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this);
-
-    int min = Integer.MAX_VALUE;
-    ArrayList<String> minConnectionsHostList = new ArrayList<>();
-    for (String h : hosts) {
-      boolean wasTimedOutHost = timedOutHosts != null && timedOutHosts.contains(h);
-      if (failedHosts.contains(h) || wasTimedOutHost) {
-        LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost +")");
-        continue;
-      }
-      int currLoad = LoadBalanceService.getLoad(h);
-      LOGGER.fine("Number of connections to " + h + ": " + currLoad);
-      if (currLoad < min) {
-        min = currLoad;
-        minConnectionsHostList.clear();
-        minConnectionsHostList.add(h);
-      } else if (currLoad == min) {
-        minConnectionsHostList.add(h);
-      }
-    }
-    // Choose a random from the minimum list
+    requestFlags = newRequest ? LoadBalanceService.STRICT_PREFERENCE : requestFlags;
+    LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts +
+        ", timedOutHosts: " + timedOutHosts + ", requestFlags: " + requestFlags);
     String chosenHost = null;
-    if (minConnectionsHostList.size() > 0) {
-      int idx = ThreadLocalRandom.current().nextInt(0, minConnectionsHostList.size());
-      chosenHost = minConnectionsHostList.get(idx);
-    }
-    if (chosenHost != null) {
-      LoadBalanceService.incrementConnectionCount(chosenHost);
+
+    while (true) {
+      ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this, requestFlags);
+      int min = Integer.MAX_VALUE;
+      ArrayList<String> minConnectionsHostList = new ArrayList<>();
+      for (String h : hosts) {
+        boolean wasTimedOutHost = timedOutHosts != null && timedOutHosts.contains(h);
+        if (failedHosts.contains(h) || wasTimedOutHost) {
+          LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost + ")");
+          continue;
+        }
+        int currLoad = LoadBalanceService.getLoad(h);
+        LOGGER.fine("Number of connections to " + h + ": " + currLoad);
+        if (currLoad < min) {
+          min = currLoad;
+          minConnectionsHostList.clear();
+          minConnectionsHostList.add(h);
+        } else if (currLoad == min) {
+          minConnectionsHostList.add(h);
+        }
+      }
+      // Choose a random from the minimum list
+      if (!minConnectionsHostList.isEmpty()) {
+        int idx = ThreadLocalRandom.current().nextInt(0, minConnectionsHostList.size());
+        chosenHost = minConnectionsHostList.get(idx);
+      }
+      if (chosenHost != null) {
+        LoadBalanceService.incrementConnectionCount(chosenHost);
+        break; // We got a host
+      } else if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+        // Relax the STRICT_PREFERENCE condition and consider other node types
+        requestFlags = (byte) 0;
+      } else {
+        break; // No more hosts to try
+      }
     }
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
+    if (chosenHost == null && (loadBalance == LoadBalanceType.ONLY_PRIMARY ||
+        loadBalance == LoadBalanceType.ONLY_RR)) {
+      throw new IllegalStateException("No node available in "
+        + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" : "read-replica")
+        + " cluster to connect to.");
+    }
     return chosenHost;
   }
 

@@ -16,13 +16,14 @@ public interface LoadBalancer {
 
   /**
    * @param e The {@link LoadBalanceService.NodeInfo} object for the host
+   * @param requestFlags The attributes for the load balancer to make use of
    * @return true, if a host is eligible to be considered for a connection request
    */
-  boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e);
+  boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e, Byte requestFlags);
 
   /**
-   * @param newRequest  whether this invocation is first for a new connection request
-   * @param failedHosts list of host names which have been known to be down
+   * @param newRequest    whether this invocation is first for a new connection request
+   * @param failedHosts   list of host names which have been known to be down
    * @param timedOutHosts list of host names where connections were attempted but timed out
    * @return the name of a host with the least number of connections, as per the driver's stats
    */
