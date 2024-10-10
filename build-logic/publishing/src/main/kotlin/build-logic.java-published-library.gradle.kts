@@ -17,8 +17,6 @@ java {
 publishing {
     publications {
         create<MavenPublication>(project.name) {
-            artifactId = "jdbc-yugabytedb"
-            version = rootProject.version.toString()
             from(components["java"])
 
             // Gradle feature variants can't be mapped to Maven's pom
