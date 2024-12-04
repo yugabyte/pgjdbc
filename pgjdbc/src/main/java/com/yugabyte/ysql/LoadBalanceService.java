@@ -153,8 +153,8 @@ public class LoadBalanceService {
       Enumeration<String> hosts = clusterInfoMap.keys();
       while (hosts.hasMoreElements()) {
         NodeInfo info = clusterInfoMap.get(hosts.nextElement());
-        clusterInfoMap.put(info.publicIP, info);
         clusterInfoMap.remove(info.host);
+        clusterInfoMap.put(info.publicIP, info);
       }
     } else if (useHostColumn == null) {
       LOGGER.warning("Unable to identify set of addresses to use for establishing connections. "
