@@ -611,6 +611,7 @@ public class Driver implements java.sql.Driver {
             newConnection.close();
             return getConnectionBalanced(lbprops, timedOutHosts);
           }
+          LOGGER.info("Returning a connection to " + chosenHost);
           return newConnection;
         }
       } catch (SQLException ex) {
