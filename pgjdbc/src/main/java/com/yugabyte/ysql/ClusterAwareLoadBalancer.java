@@ -190,7 +190,7 @@ public class ClusterAwareLoadBalancer {
 
   protected ArrayList<String> getCurrentServers(Connection conn) throws SQLException {
     Statement st = conn.createStatement();
-    LOGGER.log(Level.FINE, getLoadBalancerType() + ": Executing query: "
+    LOGGER.log(Level.INFO, getLoadBalancerType() + ": Executing query: "
         + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     ArrayList<String> currentPrivateIps = new ArrayList<>();
@@ -264,12 +264,12 @@ public class ClusterAwareLoadBalancer {
       if (publicHosts.isEmpty()) {
         useHostColumn = Boolean.TRUE;
       }
-      LOGGER.log(Level.FINE, getLoadBalancerType() + ": Either private or public address should "
+      LOGGER.log(Level.INFO, getLoadBalancerType() + ": Either private or public address should "
           + "have matched with one of the servers. Using private addresses.");
       return privateHosts;
     }
     ArrayList<String> currentHosts = useHostColumn ? privateHosts : publicHosts;
-    LOGGER.log(Level.FINE, getLoadBalancerType() + ": List of servers got {0}", currentHosts);
+    LOGGER.log(Level.INFO, getLoadBalancerType() + ": List of servers got {0}", currentHosts);
     return currentHosts;
   }
 
