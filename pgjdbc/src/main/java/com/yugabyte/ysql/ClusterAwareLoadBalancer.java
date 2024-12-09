@@ -33,7 +33,7 @@ import static com.yugabyte.ysql.LoadBalanceProperties.*;
 
 public class ClusterAwareLoadBalancer {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
-  protected static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
+  protected static final Logger LOGGER = Logger.getLogger("com.yugabyte.ysql.ClusterAwareLoadBalancer");
   /**
    * The default value should ideally match the interval at which the server-list is updated at
    * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
@@ -112,7 +112,7 @@ public class ClusterAwareLoadBalancer {
     for (String h : hostToNumConnMap.keySet()) {
       boolean wasTimedOutHost = timedOutHosts != null && timedOutHosts.contains(h);
       if (failedHosts.contains(h) || wasTimedOutHost) {
-        LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost +")");
+        LOGGER.info("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost +")");
         continue;
       }
       int currLoad = hostToNumConnMap.get(h);
@@ -297,10 +297,10 @@ public class ClusterAwareLoadBalancer {
     Set<String> possiblyReachableHosts = new HashSet();
     for (Map.Entry<String, Long> e : unreachableHosts.entrySet()) {
       if ((now - e.getValue()) > failedHostTTL) {
-        LOGGER.fine("Putting host  " + e.getKey() + " into possiblyReachableHosts");
+        LOGGER.info("Putting host  " + e.getKey() + " into possiblyReachableHosts");
         possiblyReachableHosts.add(e.getKey());
       } else {
-        LOGGER.fine("Not removing this host from unreachableHosts: " + e.getKey());
+        LOGGER.info("Not removing this host from unreachableHosts: " + e.getKey());
       }
     }
 

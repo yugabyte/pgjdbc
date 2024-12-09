@@ -36,7 +36,7 @@ public class LoadBalanceProperties {
   public static final int DEFAULT_REFRESH_INTERVAL = 300;
   public static final int MAX_REFRESH_INTERVAL = 600;
 
-  private static final Logger LOGGER = Logger.getLogger("org.postgresql.Driver");
+  private static final Logger LOGGER = Logger.getLogger("com.yugabyte.ysql.LoadBalanceProperties");
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
    load-balance 'simple' to be used as KEY and for targeted topologies,
     <placements> value specified will be used as key

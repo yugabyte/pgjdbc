@@ -189,7 +189,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
         if (fallbackPrivateIPs.get(i).contains(chosenHost)) {
           ArrayList<String> hosts = fallbackPrivateIPs.computeIfAbsent(i, k -> new ArrayList<>());
           hosts.remove(chosenHost);
-          LOGGER.log(Level.FINE,
+          LOGGER.log(Level.INFO,
               getLoadBalancerType() + ": Removing failed host " + chosenHost
                   + " from fallback level " + (i - 1));
           return;
@@ -199,7 +199,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
         if (fallbackPublicIPs.get(i).contains(chosenHost)) {
           ArrayList<String> hosts = fallbackPublicIPs.computeIfAbsent(i, k -> new ArrayList<>());
           hosts.remove(chosenHost);
-          LOGGER.log(Level.FINE,
+          LOGGER.log(Level.INFO,
               getLoadBalancerType() + ": Removing failed host " + chosenHost
                   + " from fallback level " + (i - 1));
           return;
@@ -256,7 +256,7 @@ public class TopologyAwareLoadBalancer extends ClusterAwareLoadBalancer {
       return servers;
     }
     if (fallbackPrivateIPs.get(REST_OF_CLUSTER) != null) {
-      LOGGER.fine("Returning servers from rest of the cluster: "
+      LOGGER.info("Returning servers from rest of the cluster: "
           + fallbackPrivateIPs.get(REST_OF_CLUSTER));
     }
     return super.getPrivateOrPublicServers(fallbackPrivateIPs.get(REST_OF_CLUSTER),

@@ -305,7 +305,7 @@ public class Driver implements java.sql.Driver {
           if (lbprops.hasLoadBalance() && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
               ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
             LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
-                + prevTimedOutServers.get(prevTimedOutServers.size()) + 
+                + prevTimedOutServers.get(prevTimedOutServers.size()) +
                 " trying other servers, retryAttempt=" + tries);
           } else {
             throw ex1;
@@ -506,7 +506,7 @@ public class Driver implements java.sql.Driver {
    *
    * @param url           the original URL
    * @param properties    the parsed/defaulted connection properties
-   * @param timedOutHosts A list of previously timedout servers passed from Connect thread 
+   * @param timedOutHosts A list of previously timedout servers passed from Connect thread
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
@@ -605,7 +605,7 @@ public class Driver implements java.sql.Driver {
         } else {
           boolean betterNodeAvailable = loadBalancer.hasMorePreferredNode(chosenHost);
           if (betterNodeAvailable) {
-            LOGGER.log(Level.FINE,
+            LOGGER.log(Level.INFO,
                 "A higher priority node than " + chosenHost + " is available");
             loadBalancer.decrementHostToNumConnCount(chosenHost);
             newConnection.close();
