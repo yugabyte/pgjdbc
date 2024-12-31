@@ -23,6 +23,8 @@ package org.postgresql;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
+import com.yugabyte.ysql.LoadBalancer;
+
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.jdbc.ResourceLock;
 import org.postgresql.jdbcurlresolver.PgPassParser;
@@ -314,8 +316,9 @@ public class Driver implements java.sql.Driver {
       // more details.
       long timeout = timeout(props);
       LoadBalanceProperties lbprops = LoadBalanceProperties.getLoadBalanceProperties(url, props);
+      LoadBalancer lb = lbprops.getAppropriateLoadBalancer(url, props);
       if (timeout <= 0) {
-        return makeConnection(url, props, lbprops, null);
+        return makeConnection(url, props, lb, lbprops, null);
       }
 
       ConnectThread ct;
@@ -323,7 +326,7 @@ public class Driver implements java.sql.Driver {
       int maxRetries = 10;
       int tries = 0;
       while(true) {
-        ct = new ConnectThread(url, props, lbprops, prevTimedOutServers);
+        ct = new ConnectThread(url, props, lbprops, lb, prevTimedOutServers);
         try {
           Thread thread = new Thread(ct, "PostgreSQL JDBC driver connection thread");
           thread.setDaemon(true); // Don't prevent the VM from shutting down
@@ -381,12 +384,14 @@ public class Driver implements java.sql.Driver {
 
     private final ArrayList<String> triedHosts;
     private final LoadBalanceProperties lbprops;
+    private final LoadBalancer lb;
     ConnectThread(String url, Properties props,
-        LoadBalanceProperties lbprops, ArrayList<String> prevTimedOutServers) {
+        LoadBalanceProperties lbprops, LoadBalancer lb, ArrayList<String> prevTimedOutServers) {
       this.url = url;
       this.props = props;
       this.lbprops = lbprops;
       triedHosts = prevTimedOutServers;
+      this.lb = lb;
     }
 
     @Override
@@ -395,7 +400,7 @@ public class Driver implements java.sql.Driver {
       Throwable error;
 
       try {
-        conn = makeConnection(url, props, lbprops, triedHosts);
+        conn = makeConnection(url, props, lb, lbprops, triedHosts);
         error = null;
       } catch (Throwable t) {
         conn = null;
@@ -482,14 +487,15 @@ public class Driver implements java.sql.Driver {
    *
    * @param url           the original URL
    * @param properties    the parsed/defaulted connection properties
+   * @param lbprops
    * @param timedOutHosts A list of previously timedout servers passed from Connect thread
    * @return a new connection
    * @throws SQLException if the connection could not be made
    */
   private static Connection makeConnection(String url, Properties properties,
-      LoadBalanceProperties lbprops, ArrayList<String> timedOutHosts) throws SQLException {
+      LoadBalancer lb, LoadBalanceProperties lbprops, ArrayList<String> timedOutHosts) throws SQLException {
     Connection connection = LoadBalanceService.getConnection(url, properties,
-        lbprops, timedOutHosts);
+        lb, lbprops, timedOutHosts);
     if (connection != null) {
       return connection;
     }

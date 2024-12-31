@@ -35,4 +35,7 @@ public interface LoadBalancer {
    */
   int getRefreshListSeconds();
 
+  void setUuid(String uuid);
+  String getUuid();
+
 }
