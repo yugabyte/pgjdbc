@@ -60,9 +60,10 @@ public class LoadBalanceProperties {
    */
   private static final Map<String, LoadBalancer> CONNECTION_MANAGER_MAP =
       new HashMap<>();
-
   private static final Map<LoadBalancerKey, LoadBalanceProperties> loadBalancePropertiesMap =
       new ConcurrentHashMap<>();
+  private static final Map<LoadBalancerKey, LoadBalancer> loadBalancerKeyToLoadBalancerMap =
+      new HashMap<>();
   private final String originalUrl;
   private final Properties originalProperties;
   private LoadBalanceService.LoadBalanceType loadBalance = LoadBalanceService.LoadBalanceType.FALSE;
@@ -264,6 +265,53 @@ public class LoadBalanceProperties {
     return ybURL;
   }
 
+  public LoadBalancer getAppropriateLoadBalancer(String url, Properties properties){
+    if (!isLoadBalanceEnabled()) {
+      throw new IllegalStateException(
+          "This method is expected to be called only when load-balance is true");
+    }
+    // todo Find a better way to pass/update these properties. Currently, lb instance is
+    //  singleton for a given placement, so cannot include these in it.
+    if (refreshIntervalSpecified) {
+      System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
+    }
+    if (failedHostReconnectDelaySpecified) {
+      System.setProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, String.valueOf(failedHostReconnectDelaySecs));
+    }
+    LoadBalancerKey key = new LoadBalancerKey(url, properties);
+    LoadBalancer ld = null;
+    if (placements == null)
+    {
+      ld = loadBalancerKeyToLoadBalancerMap.get(key);
+      if (ld == null) {
+        LOGGER.fine("No LB found for key:" + key + ", creating one ...");
+        synchronized (loadBalancerKeyToLoadBalancerMap) {
+          ld = loadBalancerKeyToLoadBalancerMap.get(key);
+          if (ld == null) {
+            ld = new ClusterAwareLoadBalancer(this.loadBalance, refreshInterval);
+            loadBalancerKeyToLoadBalancerMap.put(key, ld);
+          }
+        }
+      } else {
+        LOGGER.fine("LB found for " + this.loadBalance + ": " + ld);
+      }
+    }else {
+      ld = loadBalancerKeyToLoadBalancerMap.get(key);
+      if (ld == null) {
+        LOGGER.fine("No LB found for key:" + key + " and placements " + placements + " and fallback? " + explicitFallbackOnly + ", creating one ...");
+        synchronized (loadBalancerKeyToLoadBalancerMap) {
+          ld = loadBalancerKeyToLoadBalancerMap.get(key);
+          if (ld == null) {
+            ld = new TopologyAwareLoadBalancer(loadBalance, placements, explicitFallbackOnly);
+            loadBalancerKeyToLoadBalancerMap.put(key, ld);
+          }
+        }
+      } else {
+        LOGGER.fine("LB found for " + this.loadBalance + " and placements " + placements + ": " + ld);
+      }
+    }
+    return ld;
+  }
   public LoadBalancer getAppropriateLoadBalancer() {
     if (!isLoadBalanceEnabled()) {
       throw new IllegalStateException(

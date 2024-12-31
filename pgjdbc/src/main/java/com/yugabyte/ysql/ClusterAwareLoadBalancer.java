@@ -29,9 +29,21 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   private final LoadBalanceService.LoadBalanceType loadBalance;
   private byte requestFlags;
 
+  private String uuid;
+
   @Override
   public int getRefreshListSeconds() {
     return refreshListSeconds;
+  }
+
+  @Override
+  public void setUuid(String uuid) {
+    this.uuid = uuid;
+  }
+
+  @Override
+  public String getUuid() {
+    return uuid;
   }
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;

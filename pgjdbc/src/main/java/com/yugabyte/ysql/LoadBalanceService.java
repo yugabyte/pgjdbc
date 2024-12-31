@@ -5,10 +5,7 @@ import static com.yugabyte.ysql.LoadBalanceProperties.FAILED_HOST_RECONNECT_DELA
 import static org.postgresql.Driver.hostSpecs;
 
 import org.postgresql.jdbc.PgConnection;
-import org.postgresql.util.GT;
-import org.postgresql.util.HostSpec;
-import org.postgresql.util.PSQLException;
-import org.postgresql.util.PSQLState;
+import org.postgresql.util.*;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -21,15 +18,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class LoadBalanceService {
-
-  private static final ConcurrentHashMap<String, NodeInfo> clusterInfoMap = new ConcurrentHashMap<>();
   static final byte STRICT_PREFERENCE = 0b00000001;
-  private static Connection controlConnection = null;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static long lastRefreshTime;
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
+  private static Map<String, ClusterInfo> uuidToClusterInfoMap = new ConcurrentHashMap<>();
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -47,11 +42,11 @@ public class LoadBalanceService {
    */
   static synchronized void clear() throws SQLException {
     LOGGER.warning("Clearing LoadBalanceService state for testing purposes");
-    clusterInfoMap.clear();
-    if (controlConnection != null) {
-      controlConnection.close();
-      controlConnection = null;
-    }
+    uuidToClusterInfoMap.clear();
+//     if (controlConnection != null) {
+//       controlConnection.close();
+//       controlConnection = null;
+//     }
     lastRefreshTime = 0;
     forceRefreshOnce = false;
     useHostColumn = null;
@@ -76,13 +71,13 @@ public class LoadBalanceService {
     return false;
   }
 
-  private static synchronized boolean refresh(Connection conn, long refreshInterval) throws SQLException {
+  private static synchronized boolean refresh(Connection conn, long refreshInterval, LoadBalancer lb) throws SQLException {
     forceRefreshOnce = false;
     Statement st = conn.createStatement();
     LOGGER.fine("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
-
+    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> clusterInfoMap = null;
     boolean publicIPsGivenForAll = true;
     while (rs.next()) {
       String host = rs.getString("host");
@@ -94,6 +89,16 @@ public class LoadBalanceService {
       String region = rs.getString("region");
       String zone = rs.getString("zone");
       String nodeType = rs.getString("node_type");
+      String uuid = rs.getString("universe_uuid");
+      if (lb.getUuid() == null){
+        lb.setUuid(uuid);
+      }
+      ClusterInfo cluster = uuidToClusterInfoMap.containsKey(lb.getUuid())? uuidToClusterInfoMap.get(uuid): new ClusterInfo();
+      if (cluster.getControlConnection() == null) {
+        cluster.setControlConnection(conn);
+      }
+      // TODO : Discuss how to set clusterinfomap
+      clusterInfoMap = cluster.getClusterInfoMap() != null? cluster.getClusterInfoMap(): new ConcurrentHashMap<>();
       NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
@@ -243,10 +248,10 @@ public class LoadBalanceService {
   }
 
   public static Connection getConnection(String url, Properties properties,
-      LoadBalanceProperties lbProperties, ArrayList<String> timedOutHosts) {
+      LoadBalancer lb, LoadBalanceProperties lbProperties, ArrayList<String> timedOutHosts) {
     // Cleanup extra properties used for load balancing?
     if (lbProperties.isLoadBalanceEnabled()) {
-      Connection conn = getConnection(lbProperties, properties, timedOutHosts);
+      Connection conn = getConnection(lb, lbProperties, properties, timedOutHosts);
       if (conn != null) {
         return conn;
       }
@@ -257,9 +262,8 @@ public class LoadBalanceService {
     return null;
   }
 
-  private static Connection getConnection(LoadBalanceProperties loadBalanceProperties,
+  private static Connection getConnection(LoadBalancer lb, LoadBalanceProperties loadBalanceProperties,
       Properties props, ArrayList<String> timedOutHosts) {
-    LoadBalancer lb = loadBalanceProperties.getAppropriateLoadBalancer();
     String url = loadBalanceProperties.getStrippedURL();
 
     if (!checkAndRefresh(loadBalanceProperties, lb)) {
@@ -292,7 +296,7 @@ public class LoadBalanceService {
             firstException = ex;
           }
           LOGGER.fine("couldn't connect to " + chosenHost + ", adding it to failed host list");
-          markAsFailed(chosenHost);
+          markAsFailed(chosenHost, lb);
         } else {
           // Log the exception. Consider other failures as temporary and not as serious as
           // PSQLState.CONNECTION_UNABLE_TO_CONNECT. So for other failures it will be ignored
@@ -324,16 +328,19 @@ public class LoadBalanceService {
       Properties properties = new Properties(props);
       properties.setProperty("socketTimeout", "15");
       HostSpec[] hspec = hostSpecs(properties);
-
+      Connection controlConnection = null;
       ArrayList<String> hosts = getAllAvailableHosts(new ArrayList<>());
+      String uuid = lb.getUuid();
       while (true) {
         boolean refreshFailed = false;
         try {
-          if (controlConnection == null || controlConnection.isClosed()) {
-            controlConnection = new PgConnection(hspec, properties, url);
+          controlConnection = new PgConnection(hspec, properties, url);
+          if (uuid != null){
+            controlConnection.close();
+            controlConnection = uuidToClusterInfoMap.get(uuid).getControlConnection();
           }
           try {
-            refresh(controlConnection, lb.getRefreshListSeconds());
+            refresh(controlConnection, lb.getRefreshListSeconds(), lb);
             break;
           } catch (SQLException e) {
             // May fail with "terminating connection due to unexpected postmaster exit", 57P01
@@ -524,5 +531,26 @@ public class LoadBalanceService {
 
   public enum LoadBalanceType {
     FALSE, ANY, PREFER_PRIMARY, PREFER_RR, ONLY_PRIMARY, ONLY_RR
+  }
+
+  public static class ClusterInfo {
+    private Connection controlConnection;
+    private ConcurrentHashMap<String, LoadBalanceService.NodeInfo> clusterInfoMap;
+
+    public Connection getControlConnection() {
+      return controlConnection;
+    }
+
+    public void setControlConnection(Connection controlConnection) {
+      this.controlConnection = controlConnection;
+    }
+
+    public ConcurrentHashMap<String, NodeInfo> getClusterInfoMap() {
+      return clusterInfoMap;
+    }
+
+    public void setClusterInfoMap(ConcurrentHashMap<String, NodeInfo> clusterInfoMap) {
+      this.clusterInfoMap = clusterInfoMap;
+    }
   }
 }
