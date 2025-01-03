@@ -24,7 +24,7 @@ import java.util.logging.Logger;
 public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
 
-  private static volatile ClusterAwareLoadBalancer instance;
+  private static volatile ClusterAwareLoadBalancer instance; // todo how is this working for RR support?
   private List<String> attempted = new ArrayList<>();
   private final LoadBalanceService.LoadBalanceType loadBalance;
   private byte requestFlags;
@@ -99,7 +99,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     String chosenHost = null;
 
     while (true) {
-      ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this, requestFlags);
+      ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(uuid, this, requestFlags);
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
       for (String h : hosts) {
@@ -108,7 +108,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
           LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost + ")");
           continue;
         }
-        int currLoad = LoadBalanceService.getLoad(h);
+        int currLoad = LoadBalanceService.getLoad(uuid, h);
         LOGGER.fine("Number of connections to " + h + ": " + currLoad);
         if (currLoad < min) {
           min = currLoad;
@@ -124,7 +124,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
         chosenHost = minConnectionsHostList.get(idx);
       }
       if (chosenHost != null) {
-        LoadBalanceService.incrementConnectionCount(chosenHost);
+        LoadBalanceService.incrementConnectionCount(uuid, chosenHost);
         break; // We got a host
       } else if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
         // Relax the STRICT_PREFERENCE condition and consider other node types

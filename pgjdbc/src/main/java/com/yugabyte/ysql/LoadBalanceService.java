@@ -24,7 +24,8 @@ public class LoadBalanceService {
   private static long lastRefreshTime;
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
-  private static Map<String, ClusterInfo> uuidToClusterInfoMap = new ConcurrentHashMap<>();
+  public static Map<String, ClusterInfo> uuidToClusterInfoMap = new ConcurrentHashMap<>();
+  public static Map<String, String> lbKeyToUuidMap = new ConcurrentHashMap<>();
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -32,8 +33,11 @@ public class LoadBalanceService {
   public static void printHostToConnectionMap() {
     System.out.println("Current load on servers");
     System.out.println("-------------------");
-    for (Map.Entry<String, NodeInfo> e : clusterInfoMap.entrySet()) {
-      System.out.println(e.getKey() + " - " + e.getValue().connectionCount);
+    for (Map.Entry<String, ClusterInfo> c : uuidToClusterInfoMap.entrySet()) {
+      System.out.println("Cluster uuid: " + c.getKey());
+      for (Map.Entry<String, NodeInfo> e : c.getValue().clusterInfoMap.entrySet()) {
+        System.out.println(e.getKey() + " - " + e.getValue().connectionCount);
+      }
     }
   }
 
@@ -167,8 +171,8 @@ public class LoadBalanceService {
     return true;
   }
 
-  private static void markAsFailed(String host) {
-    NodeInfo info = clusterInfoMap.get(host);
+  private static void markAsFailed(String uuid, String host) {
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
     if (info == null) {
       return; // unexpected
     }
@@ -181,14 +185,14 @@ public class LoadBalanceService {
     }
   }
 
-  static int getLoad(String host) {
-    NodeInfo info = clusterInfoMap.get(host);
+  static int getLoad(String uuid, String host) {
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
     return info == null ? 0 : info.connectionCount;
   }
 
-  static ArrayList<String> getAllEligibleHosts(LoadBalancer policy, Byte requestFlags) {
+  static ArrayList<String> getAllEligibleHosts(String uuid, LoadBalancer policy, Byte requestFlags) {
     ArrayList<String> list = new ArrayList<>();
-    Set<Map.Entry<String, NodeInfo>> set = clusterInfoMap.entrySet();
+    Set<Map.Entry<String, NodeInfo>> set = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
       if (policy.isHostEligible(e, requestFlags)) {
         list.add(e.getKey());
@@ -199,8 +203,9 @@ public class LoadBalanceService {
     return list;
   }
 
-  private static ArrayList<String> getAllAvailableHosts(ArrayList<String> attempted) {
+  private static ArrayList<String> getAllAvailableHosts(String uuid, ArrayList<String> attempted) {
     ArrayList<String> list = new ArrayList<>();
+    ConcurrentHashMap<String, NodeInfo> clusterInfoMap = uuidToClusterInfoMap.get(uuid).getClusterInfoMap();
     Enumeration<String> hosts = clusterInfoMap.keys();
     while (hosts.hasMoreElements()) {
       String h = hosts.nextElement();
@@ -211,13 +216,13 @@ public class LoadBalanceService {
     return list;
   }
 
-  private static int getPort(String host) {
-    NodeInfo info = clusterInfoMap.get(host);
+  private static int getPort(String uuid, String host) {
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
     return info != null ? info.port : 5433;
   }
 
-  static boolean incrementConnectionCount(String host) {
-    NodeInfo info = clusterInfoMap.get(host);
+  static boolean incrementConnectionCount(String uuid, String host) {
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
     if (info != null) {
       synchronized (info) {
         if (info.connectionCount < 0) {
@@ -232,7 +237,16 @@ public class LoadBalanceService {
   }
 
   public static boolean decrementConnectionCount(String host) {
-    NodeInfo info = clusterInfoMap.get(host);
+    for (String uuid : uuidToClusterInfoMap.keySet()) {
+      if (decrementConnectionCount(uuid, host)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static boolean decrementConnectionCount(String uuid, String host) {
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
     if (info != null) {
       synchronized (info) {
         info.connectionCount -= 1;
@@ -247,26 +261,44 @@ public class LoadBalanceService {
     return false;
   }
 
-  public static Connection getConnection(String url, Properties properties,
-      LoadBalancer lb, LoadBalanceProperties lbProperties, ArrayList<String> timedOutHosts) {
+  private static LoadBalancer getLB(LoadBalanceProperties.LoadBalancerKey key) {
+    // todo check to avoid NPE
+    LoadBalancer lb = uuidToClusterInfoMap.get(lbKeyToUuidMap.get(key)).getLbKeyToLBMap().get(key);
+    if (lb == null) {
+      // todo
+      // 1. process the url and properties and create a new LoadBalancer instance -- refer to LBProperties.processURLAndProperties()
+      // 2. create control connection and fetch yb_servers() -- refer to LBProperties.checkAndRefresh()
+      // 3. check if there is an entry in uuidToClusterInfoMap for the received uuid
+      // 4. If yes, add the LB instance to its ClusterInfo instance against this LBkey
+      // 5. If no, create a new ClusterInfo instance and set control connection, clusterInfoMap, etc. against the received uuid in uuidToClusterInfoMap
+      // 6. Also, add its entry in lbKeyToUuidMap
+    }
+    return lb;
+  }
+
+  public static Connection getConnection(LoadBalanceProperties.LoadBalancerKey key,
+      ArrayList<String> timedOutHosts) {
     // Cleanup extra properties used for load balancing?
-    if (lbProperties.isLoadBalanceEnabled()) {
-      Connection conn = getConnection(lb, lbProperties, properties, timedOutHosts);
+    if (LoadBalanceProperties.getLoadBalanceValue(key.getProperties().getProperty(LoadBalanceProperties.LOAD_BALANCE_PROPERTY_KEY)) != LoadBalanceType.FALSE) {
+      Connection conn = getConnection(key, (Properties) key.getProperties().clone(), timedOutHosts);
       if (conn != null) {
         return conn;
       }
       LOGGER.warning("Failed to apply load balance. Trying normal connection");
-      properties.setProperty("PGHOST", lbProperties.getOriginalProperties().getProperty("PGHOST"));
-      properties.setProperty("PGPORT", lbProperties.getOriginalProperties().getProperty("PGPORT"));
+      // we do not set PGHOST/PGPORT because we still have original properties in LBkey
+//       properties.setProperty("PGHOST", key.getProperties().getProperty("PGHOST"));
+//       properties.setProperty("PGPORT", key.getProperties().getProperty("PGPORT"));
     }
     return null;
   }
 
-  private static Connection getConnection(LoadBalancer lb, LoadBalanceProperties loadBalanceProperties,
+  private static Connection getConnection(LoadBalanceProperties.LoadBalancerKey key,
       Properties props, ArrayList<String> timedOutHosts) {
-    String url = loadBalanceProperties.getStrippedURL();
+    LoadBalancer lb = getLB(key); // we have the uuid now unless it is an older YBDB Cluster todo handle that case
+    String uuid = lbKeyToUuidMap.get(key);
+    String url = key.getUrl(); // todo even original url should be fine instead of loadBalanceProperties.getStrippedURL();
 
-    if (!checkAndRefresh(loadBalanceProperties, lb)) {
+    if (!checkAndRefresh(key, lb)) {
       LOGGER.fine("Attempt to refresh info from yb_servers() failed");
       return null;
     }
@@ -278,7 +310,7 @@ public class LoadBalanceService {
     while (chosenHost != null) {
       try {
         props.setProperty("PGHOST", chosenHost);
-        props.setProperty("PGPORT", String.valueOf(getPort(chosenHost)));
+        props.setProperty("PGPORT", String.valueOf(getPort(uuid, chosenHost)));
         if (timedOutHosts != null) {
           timedOutHosts.add(chosenHost);
         }
@@ -290,13 +322,13 @@ public class LoadBalanceService {
         // Let the refresh be forced the next time it is tried. todo Is this needed?
         forceRefreshOnce = true;
         failedHosts.add(chosenHost);
-        decrementConnectionCount(chosenHost);
+        decrementConnectionCount(uuid, chosenHost);
         if (PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState().equals(ex.getSQLState())) {
           if (firstException == null) {
             firstException = ex;
           }
           LOGGER.fine("couldn't connect to " + chosenHost + ", adding it to failed host list");
-          markAsFailed(chosenHost, lb);
+          markAsFailed(uuid, chosenHost);
         } else {
           // Log the exception. Consider other failures as temporary and not as serious as
           // PSQLState.CONNECTION_UNABLE_TO_CONNECT. So for other failures it will be ignored
@@ -306,7 +338,7 @@ public class LoadBalanceService {
         }
       } catch (Throwable e) {
         LOGGER.fine("Received Throwable: " + e);
-        decrementConnectionCount(chosenHost);
+        decrementConnectionCount(uuid, chosenHost);
         throw e;
       }
       chosenHost = lb.getLeastLoadedServer(false, failedHosts, timedOutHosts);
@@ -316,20 +348,19 @@ public class LoadBalanceService {
   }
 
   /**
-   * @param loadBalanceProperties
+   * @param key
    * @param lb LoadBalancer instance
    * @return true if the refresh was not required or if it was successful.
    */
-  private static synchronized boolean checkAndRefresh(LoadBalanceProperties loadBalanceProperties,
+  private static synchronized boolean checkAndRefresh(LoadBalanceProperties.LoadBalancerKey key,
       LoadBalancer lb) {
     if (needsRefresh(lb.getRefreshListSeconds())) {
-      Properties props = loadBalanceProperties.getOriginalProperties();
-      String url = loadBalanceProperties.getStrippedURL();
-      Properties properties = new Properties(props);
+      String url = key.getUrl(); // todo original url should be fine instead of loadBalanceProperties.getStrippedURL();
+      Properties properties = new Properties(key.getProperties());
       properties.setProperty("socketTimeout", "15");
       HostSpec[] hspec = hostSpecs(properties);
       Connection controlConnection = null;
-      ArrayList<String> hosts = getAllAvailableHosts(new ArrayList<>());
+      ArrayList<String> hosts = getAllAvailableHosts(lbKeyToUuidMap.get(key), new ArrayList<>());
       String uuid = lb.getUuid();
       while (true) {
         boolean refreshFailed = false;
@@ -351,7 +382,7 @@ public class LoadBalanceService {
           if (refreshFailed) {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
             String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
-            markAsFailed(failed);
+            markAsFailed(uuid, failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
             LOGGER.fine("Exception while creating control connection to "
@@ -373,8 +404,8 @@ public class LoadBalanceService {
           } else if (!refreshFailed) {
             // Try the first host in the list (don't have to check least loaded one since it's
             // just for the control connection)
-            HostSpec hs = new HostSpec(hosts.get(0), getPort(hosts.get(0)),
-                loadBalanceProperties.getOriginalProperties().getProperty("localSocketAddress"));
+            HostSpec hs = new HostSpec(hosts.get(0), getPort(uuid, hosts.get(0)),
+                key.getProperties().getProperty("localSocketAddress"));
             hspec = new HostSpec[]{hs};
           }
           controlConnection = null;
@@ -536,6 +567,8 @@ public class LoadBalanceService {
   public static class ClusterInfo {
     private Connection controlConnection;
     private ConcurrentHashMap<String, LoadBalanceService.NodeInfo> clusterInfoMap;
+    private long lastRefreshTime;
+    private Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> lbKeyToLBMap = new ConcurrentHashMap<>();
 
     public Connection getControlConnection() {
       return controlConnection;
@@ -552,5 +585,14 @@ public class LoadBalanceService {
     public void setClusterInfoMap(ConcurrentHashMap<String, NodeInfo> clusterInfoMap) {
       this.clusterInfoMap = clusterInfoMap;
     }
+
+    public Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> getLbKeyToLBMap() {
+      return lbKeyToLBMap;
+    }
+
+    public long getLastRefreshTime() {
+      return lastRefreshTime;
+    }
+
   }
 }

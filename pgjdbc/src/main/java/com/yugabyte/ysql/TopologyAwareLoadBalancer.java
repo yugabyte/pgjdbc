@@ -37,6 +37,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
    * Holds the value of topology-keys specified.
    */
   private final String placements;
+  private String uuid;
   private final LoadBalanceService.LoadBalanceType loadBalance;
 
   private long lastRequestTime;
@@ -118,6 +119,16 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     return Integer.getInteger(REFRESH_INTERVAL_KEY, refreshIntervalSeconds);
   }
 
+  @Override
+  public void setUuid(String uuid) {
+    this.uuid = uuid;
+  }
+
+  @Override
+  public String getUuid() {
+    return this.uuid;
+  }
+
   public boolean isExplicitFallbackOnly() {
     return explicitFallbackOnly;
   }
@@ -165,7 +176,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       if (timedOutHosts != null) {
         attempted.addAll(timedOutHosts);
       }
-      hosts = LoadBalanceService.getAllEligibleHosts(this, requestFlags);
+      hosts = LoadBalanceService.getAllEligibleHosts(getUuid(), this, requestFlags);
 
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
@@ -174,7 +185,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
           LOGGER.fine("Skipping failed host " + h);
           continue;
         }
-        int currLoad = LoadBalanceService.getLoad(h);
+        int currLoad = LoadBalanceService.getLoad(getUuid(), h);
         LOGGER.fine("Number of connections to " + h + ": " + currLoad);
         if (currLoad < min) {
           min = currLoad;
@@ -190,7 +201,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         chosenHost = minConnectionsHostList.get(idx);
       }
       if (chosenHost != null) {
-        LoadBalanceService.incrementConnectionCount(chosenHost);
+        LoadBalanceService.incrementConnectionCount(getUuid(), chosenHost);
       } else {
         LOGGER.fine("chosenHost is null for placement level " + currentPlacementIndex
             + ", allowedPlacements: " + allowedPlacements);

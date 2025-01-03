@@ -85,14 +85,13 @@ public class LoadBalanceProperties {
     }
   }
 
-  public static LoadBalanceProperties getLoadBalanceProperties(String url, Properties properties) {
-    LoadBalancerKey key = new LoadBalancerKey(url, properties);
+  public static LoadBalanceProperties getLoadBalanceProperties(LoadBalancerKey key) {
     LoadBalanceProperties lbp = loadBalancePropertiesMap.get(key);
     if (lbp == null) {
       synchronized (LoadBalanceProperties.class) {
         lbp = loadBalancePropertiesMap.get(key);
         if (lbp == null) {
-          lbp = new LoadBalanceProperties(url, properties);
+          lbp = new LoadBalanceProperties(key);
           loadBalancePropertiesMap.put(key, lbp);
         }
       }
@@ -100,9 +99,9 @@ public class LoadBalanceProperties {
     return lbp;
   }
 
-  private LoadBalanceProperties(String origUrl, Properties origProperties) {
-    originalUrl = origUrl;
-    originalProperties = (Properties) origProperties.clone();
+  private LoadBalanceProperties(LoadBalancerKey key) {
+    originalUrl = key.getUrl();
+    originalProperties = (Properties) key.getProperties().clone();
     ybURL = processURLAndProperties();
   }
 
@@ -204,30 +203,29 @@ public class LoadBalanceProperties {
   }
 
   private void setLoadBalanceValue(String value) {
+    this.loadBalance = getLoadBalanceValue(value);
+    LOGGER.fine("loadbalance value set to " + this.loadBalance);
+  }
+
+  public static LoadBalanceService.LoadBalanceType getLoadBalanceValue(String value) {
     switch (value.toLowerCase(Locale.ROOT)) {
     case "true":
     case "any":
-      this.loadBalance = LoadBalanceService.LoadBalanceType.ANY;
-      break;
+      return LoadBalanceService.LoadBalanceType.ANY;
     case "prefer-primary":
-      this.loadBalance = LoadBalanceService.LoadBalanceType.PREFER_PRIMARY;
-      break;
+      return LoadBalanceService.LoadBalanceType.PREFER_PRIMARY;
     case "prefer-rr":
-      this.loadBalance = LoadBalanceService.LoadBalanceType.PREFER_RR;
-      break;
+      return LoadBalanceService.LoadBalanceType.PREFER_RR;
     case "only-primary":
-      this.loadBalance = LoadBalanceService.LoadBalanceType.ONLY_PRIMARY;
-      break;
+      return LoadBalanceService.LoadBalanceType.ONLY_PRIMARY;
     case "only-rr":
-      this.loadBalance = LoadBalanceService.LoadBalanceType.ONLY_RR;
-      break;
+      return LoadBalanceService.LoadBalanceType.ONLY_RR;
     case "false":
-      this.loadBalance = LoadBalanceService.LoadBalanceType.FALSE;
-      break;
+      return LoadBalanceService.LoadBalanceType.FALSE;
     default:
       LOGGER.warning("Invalid value for load-balance: " + value + ", ignoring it.");
+      return LoadBalanceService.LoadBalanceType.FALSE;
     }
-    LOGGER.fine("loadbalance value set to " + this.loadBalance);
   }
 
   private int parseAndGetValue(String propValue, int defaultValue, int maxValue) {
@@ -265,20 +263,19 @@ public class LoadBalanceProperties {
     return ybURL;
   }
 
-  public LoadBalancer getAppropriateLoadBalancer(String url, Properties properties){
+  public LoadBalancer getAppropriateLoadBalancer(LoadBalancerKey key) {
     if (!isLoadBalanceEnabled()) {
       throw new IllegalStateException(
           "This method is expected to be called only when load-balance is true");
     }
     // todo Find a better way to pass/update these properties. Currently, lb instance is
-    //  singleton for a given placement, so cannot include these in it.
+    //  singleton for a given placement, so cannot include these in it. - NA now
     if (refreshIntervalSpecified) {
       System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
     }
     if (failedHostReconnectDelaySpecified) {
       System.setProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, String.valueOf(failedHostReconnectDelaySecs));
     }
-    LoadBalancerKey key = new LoadBalancerKey(url, properties);
     LoadBalancer ld = null;
     if (placements == null)
     {
@@ -295,7 +292,7 @@ public class LoadBalanceProperties {
       } else {
         LOGGER.fine("LB found for " + this.loadBalance + ": " + ld);
       }
-    }else {
+    } else {
       ld = loadBalancerKeyToLoadBalancerMap.get(key);
       if (ld == null) {
         LOGGER.fine("No LB found for key:" + key + " and placements " + placements + " and fallback? " + explicitFallbackOnly + ", creating one ...");
@@ -360,9 +357,17 @@ public class LoadBalanceProperties {
     return ld;
   }
 
-  private static class LoadBalancerKey {
+  public static class LoadBalancerKey {
     private String url;
     private Properties properties;
+
+    public String getUrl() {
+      return url;
+    }
+
+    public Properties getProperties() {
+      return properties;
+    }
 
     public LoadBalancerKey(String url, Properties properties) {
       this.url = url;
