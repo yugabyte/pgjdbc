@@ -56,8 +56,9 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private final int refreshIntervalSeconds;
   private boolean explicitFallbackOnly = false;
   private byte requestFlags;
+  private int failedHostReconnectDelaySecs;
 
-  public TopologyAwareLoadBalancer(LoadBalanceType lb, String placementValues, boolean onlyExplicitFallback) {
+  public TopologyAwareLoadBalancer(LoadBalanceType lb, int refreshInterval, String placementValues, boolean onlyExplicitFallback, int failedHostReconnectDelaySecs) {
     if (lb != null) {
       loadBalance = lb;
     } else {
@@ -65,7 +66,9 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     }
     placements = placementValues;
     explicitFallbackOnly = onlyExplicitFallback;
-    refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);
+    refreshIntervalSeconds = refreshInterval;
+//     refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);
+    this.failedHostReconnectDelaySecs = failedHostReconnectDelaySecs;
     parseGeoLocations();
   }
 

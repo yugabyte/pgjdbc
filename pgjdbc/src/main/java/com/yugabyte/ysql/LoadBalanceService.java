@@ -25,7 +25,10 @@ public class LoadBalanceService {
   private static boolean forceRefreshOnce = false;
   private static Boolean useHostColumn = null;
   public static Map<String, ClusterInfo> uuidToClusterInfoMap = new ConcurrentHashMap<>();
-  public static Map<String, String> lbKeyToUuidMap = new ConcurrentHashMap<>();
+  public static Map<LoadBalanceProperties.LoadBalancerKey, String> lbKeyToUuidMap = new ConcurrentHashMap<>();
+  private Connection controlConnection = null;
+  private ConcurrentHashMap<String, LoadBalanceService.NodeInfo> nodeInfoMap;
+
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -75,7 +78,7 @@ public class LoadBalanceService {
     return false;
   }
 
-  private static synchronized boolean refresh(Connection conn, long refreshInterval, LoadBalancer lb) throws SQLException {
+  private static synchronized String refresh(Connection conn, long refreshInterval, LoadBalancer lb) throws SQLException {
     forceRefreshOnce = false;
     Statement st = conn.createStatement();
     LOGGER.fine("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
@@ -83,6 +86,8 @@ public class LoadBalanceService {
     InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> clusterInfoMap = null;
     boolean publicIPsGivenForAll = true;
+    String uuid = null;
+    ClusterInfo cluster = null;
     while (rs.next()) {
       String host = rs.getString("host");
       LOGGER.finest("Received entry for host " + host);
@@ -93,16 +98,27 @@ public class LoadBalanceService {
       String region = rs.getString("region");
       String zone = rs.getString("zone");
       String nodeType = rs.getString("node_type");
-      String uuid = rs.getString("universe_uuid");
+      try{
+        uuid = rs.getString("universe_uuid");
+      } catch (Exception e){
+        LOGGER.warning("Connections being made to an older version of yugabytedb with universe uuid not present in yb_servers() function. Multi cluster connections are not supported in case of two such clusters");
+        uuid = "default";
+      }
+
       if (lb.getUuid() == null){
         lb.setUuid(uuid);
       }
-      ClusterInfo cluster = uuidToClusterInfoMap.containsKey(lb.getUuid())? uuidToClusterInfoMap.get(uuid): new ClusterInfo();
+      if (cluster == null){
+        cluster = uuidToClusterInfoMap.containsKey(lb.getUuid())? uuidToClusterInfoMap.get(uuid): new ClusterInfo();
+      }
       if (cluster.getControlConnection() == null) {
         cluster.setControlConnection(conn);
       }
       // TODO : Discuss how to set clusterinfomap
-      clusterInfoMap = cluster.getClusterInfoMap() != null? cluster.getClusterInfoMap(): new ConcurrentHashMap<>();
+      if
+      (clusterInfoMap == null) {
+        clusterInfoMap = cluster.getClusterInfoMap() != null? cluster.getClusterInfoMap(): new ConcurrentHashMap<>();
+      }
       NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
@@ -168,7 +184,11 @@ public class LoadBalanceService {
           + "Using private addresses.");
     }
     lastRefreshTime = System.currentTimeMillis();
-    return true;
+      if (cluster != null) {
+        cluster.setClusterInfoMap(clusterInfoMap);
+      }
+      uuidToClusterInfoMap.putIfAbsent(uuid, cluster);
+    return uuid;
   }
 
   private static void markAsFailed(String uuid, String host) {
@@ -205,6 +225,8 @@ public class LoadBalanceService {
 
   private static ArrayList<String> getAllAvailableHosts(String uuid, ArrayList<String> attempted) {
     ArrayList<String> list = new ArrayList<>();
+    if (uuid == null)
+      return list;
     ConcurrentHashMap<String, NodeInfo> clusterInfoMap = uuidToClusterInfoMap.get(uuid).getClusterInfoMap();
     Enumeration<String> hosts = clusterInfoMap.keys();
     while (hosts.hasMoreElements()) {
@@ -263,12 +285,36 @@ public class LoadBalanceService {
 
   private static LoadBalancer getLB(LoadBalanceProperties.LoadBalancerKey key) {
     // todo check to avoid NPE
-    LoadBalancer lb = uuidToClusterInfoMap.get(lbKeyToUuidMap.get(key)).getLbKeyToLBMap().get(key);
+    LoadBalancer lb = null;
+    if (lbKeyToUuidMap.get(key) != null) {
+      lb = uuidToClusterInfoMap.get(lbKeyToUuidMap.get(key)).getLbKeyToLBMap().get(key);
+    }
     if (lb == null) {
-      // todo
       // 1. process the url and properties and create a new LoadBalancer instance -- refer to LBProperties.processURLAndProperties()
+      LoadBalanceProperties.ProcessedProperties processedProperties = LoadBalanceProperties.processURLAndProperties(key.getUrl(), key.getProperties());
+      if (processedProperties.getPlacements() == null) {
+        lb = new ClusterAwareLoadBalancer(processedProperties.getLoadBalance(), processedProperties.getRefreshInterval(), processedProperties.isExplicitFallbackOnly(), processedProperties.getFailedHostReconnectDelaySecs());
+      } else {
+        lb = new TopologyAwareLoadBalancer(processedProperties.getLoadBalance(), processedProperties.getRefreshInterval(), processedProperties.getPlacements(), processedProperties.isExplicitFallbackOnly(), processedProperties.getFailedHostReconnectDelaySecs());
+      }
       // 2. create control connection and fetch yb_servers() -- refer to LBProperties.checkAndRefresh()
+      String uuid = checkAndRefresh(key, lb);
+      if (uuid == null) {
+        LOGGER.fine("Attempt to refresh info from yb_servers() failed");
+        return null;
+      }
+
       // 3. check if there is an entry in uuidToClusterInfoMap for the received uuid
+      if (uuidToClusterInfoMap.containsKey(uuid)){
+        ClusterInfo cluster = uuidToClusterInfoMap.get(uuid);
+        cluster.getLbKeyToLBMap().put(key, lb);
+        lbKeyToUuidMap.putIfAbsent(key, uuid);
+      } else {
+        ClusterInfo cluster = new ClusterInfo();
+        cluster.getLbKeyToLBMap().put(key, lb);
+        uuidToClusterInfoMap.put(uuid, cluster);
+        lbKeyToUuidMap.putIfAbsent(key, uuid);
+      }
       // 4. If yes, add the LB instance to its ClusterInfo instance against this LBkey
       // 5. If no, create a new ClusterInfo instance and set control connection, clusterInfoMap, etc. against the received uuid in uuidToClusterInfoMap
       // 6. Also, add its entry in lbKeyToUuidMap
@@ -298,7 +344,7 @@ public class LoadBalanceService {
     String uuid = lbKeyToUuidMap.get(key);
     String url = key.getUrl(); // todo even original url should be fine instead of loadBalanceProperties.getStrippedURL();
 
-    if (!checkAndRefresh(key, lb)) {
+    if (checkAndRefresh(key, lb) == null) {
       LOGGER.fine("Attempt to refresh info from yb_servers() failed");
       return null;
     }
@@ -352,8 +398,9 @@ public class LoadBalanceService {
    * @param lb LoadBalancer instance
    * @return true if the refresh was not required or if it was successful.
    */
-  private static synchronized boolean checkAndRefresh(LoadBalanceProperties.LoadBalancerKey key,
+  private static synchronized String checkAndRefresh(LoadBalanceProperties.LoadBalancerKey key,
       LoadBalancer lb) {
+    String uuid = lb.getUuid();
     if (needsRefresh(lb.getRefreshListSeconds())) {
       String url = key.getUrl(); // todo original url should be fine instead of loadBalanceProperties.getStrippedURL();
       Properties properties = new Properties(key.getProperties());
@@ -361,7 +408,6 @@ public class LoadBalanceService {
       HostSpec[] hspec = hostSpecs(properties);
       Connection controlConnection = null;
       ArrayList<String> hosts = getAllAvailableHosts(lbKeyToUuidMap.get(key), new ArrayList<>());
-      String uuid = lb.getUuid();
       while (true) {
         boolean refreshFailed = false;
         try {
@@ -371,7 +417,7 @@ public class LoadBalanceService {
             controlConnection = uuidToClusterInfoMap.get(uuid).getControlConnection();
           }
           try {
-            refresh(controlConnection, lb.getRefreshListSeconds(), lb);
+            uuid = refresh(controlConnection, lb.getRefreshListSeconds(), lb);
             break;
           } catch (SQLException e) {
             // May fail with "terminating connection due to unexpected postmaster exit", 57P01
@@ -395,12 +441,12 @@ public class LoadBalanceService {
             LOGGER.warning("Received UNDEFINED_FUNCTION for yb_servers()" +
                 " (SQLState=42883). You may be using an older version of" +
                 " YugabyteDB, consider upgrading it.");
-            return false;
+            return null;
           }
           // Retry until servers are available
           if (hosts.isEmpty()) {
             LOGGER.fine("Failed to establish control connection to available servers");
-            return false;
+            return null;
           } else if (!refreshFailed) {
             // Try the first host in the list (don't have to check least loaded one since it's
             // just for the control connection)
@@ -412,7 +458,7 @@ public class LoadBalanceService {
         }
       }
     }
-    return true;
+    return uuid;
   }
 
   private static InetAddress getConnectedInetAddress(Connection conn) throws SQLException {

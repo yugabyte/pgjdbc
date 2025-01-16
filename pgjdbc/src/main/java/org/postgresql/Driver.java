@@ -316,12 +316,7 @@ public class Driver implements java.sql.Driver {
       // more details.
       long timeout = timeout(props);
       LoadBalanceProperties.LoadBalancerKey key = new LoadBalanceProperties.LoadBalancerKey(url, props);
-      if (LoadBalanceService.lbKeyToUuidMap.containsKey(key)) {
-        LoadBalanceService.ClusterInfo clusterInfo = LoadBalanceService.uuidToClusterInfoMap.get(LoadBalanceService.lbKeyToUuidMap.get(key));
-        // todo Get the lbproperties and pass these below
-      }
       LoadBalanceProperties lbprops = LoadBalanceProperties.getLoadBalanceProperties(key);
-      LoadBalancer lb = lbprops.getAppropriateLoadBalancer(key);
       if (timeout <= 0) {
         return makeConnection(key,null);
       }

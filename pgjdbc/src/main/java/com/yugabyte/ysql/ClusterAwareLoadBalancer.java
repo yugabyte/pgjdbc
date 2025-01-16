@@ -28,8 +28,9 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   private List<String> attempted = new ArrayList<>();
   private final LoadBalanceService.LoadBalanceType loadBalance;
   private byte requestFlags;
-
   private String uuid;
+  private boolean explicitFallbackOnly;
+  private int failedHostReconnectDelaySecs;
 
   @Override
   public int getRefreshListSeconds() {
@@ -48,21 +49,23 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval) {
+  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval, boolean explicitFallbackOnly, int failedHostReconnectDelaySecs) {
     if (lb != null) {
       this.loadBalance = lb;
     } else {
       this.loadBalance = LoadBalanceType.FALSE;
     }
     this.refreshListSeconds = refreshInterval;
+    this.explicitFallbackOnly = explicitFallbackOnly;
+    this.failedHostReconnectDelaySecs = failedHostReconnectDelaySecs;
   }
 
   public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalanceType lb,
-      int refreshListSeconds) {
+      int refreshListSeconds, boolean explicitFallbackOnly, int failedHostReconnectDelaySecs) {
     if (instance == null) {
       synchronized (ClusterAwareLoadBalancer.class) {
         if (instance == null) {
-          instance = new ClusterAwareLoadBalancer(lb, refreshListSeconds);
+          instance = new ClusterAwareLoadBalancer(lb, refreshListSeconds, explicitFallbackOnly, failedHostReconnectDelaySecs);
           instance.refreshListSeconds =
               refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
                   refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;

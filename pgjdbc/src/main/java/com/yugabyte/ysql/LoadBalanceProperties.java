@@ -67,7 +67,6 @@ public class LoadBalanceProperties {
   private final String originalUrl;
   private final Properties originalProperties;
   private LoadBalanceService.LoadBalanceType loadBalance = LoadBalanceService.LoadBalanceType.FALSE;
-  private final String ybURL;
   private String placements = null;
   private int refreshInterval = -1;
   private boolean explicitFallbackOnly;
@@ -102,11 +101,11 @@ public class LoadBalanceProperties {
   private LoadBalanceProperties(LoadBalancerKey key) {
     originalUrl = key.getUrl();
     originalProperties = (Properties) key.getProperties().clone();
-    ybURL = processURLAndProperties();
   }
 
-  public String processURLAndProperties() {
-    String[] urlParts = this.originalUrl.split("\\?");
+  public static ProcessedProperties processURLAndProperties(String url, Properties properties) {
+    ProcessedProperties processedProperties = new ProcessedProperties();
+    String[] urlParts = url.split("\\?");
     StringBuilder sb = new StringBuilder(urlParts[0]);
     if (urlParts.length == 2) {
       urlParts = urlParts[1].split(PROPERTY_SEP);
@@ -123,14 +122,14 @@ public class LoadBalanceProperties {
             continue;
           }
           String propValue = lbParts[1];
-          setLoadBalanceValue(propValue);
+          processedProperties.setLoadBalance(getLoadBalanceValue(propValue));
         } else if (part.startsWith(topologyKey)) {
           String[] lbParts = part.split(EQUALS);
           if (lbParts.length != 2) {
             LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
             continue;
           }
-          placements = lbParts[1];
+          processedProperties.setPlacements(lbParts[1]);
         } else if (part.startsWith(refreshIntervalKey)) {
           String[] lbParts = part.split(EQUALS);
           if (lbParts.length != 2) {
@@ -138,9 +137,8 @@ public class LoadBalanceProperties {
                 "Ignoring it.");
             continue;
           }
-          refreshIntervalSpecified = true;
-          refreshInterval = parseAndGetValue(lbParts[1],
-              DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
+          processedProperties.setRefreshInterval(parseAndGetValue(lbParts[1],
+              DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL));
         } else if (part.startsWith(explicitFallbackOnlyKey)) {
           String[] lbParts = part.split(EQUALS);
           if (lbParts.length != 2) {
@@ -148,7 +146,9 @@ public class LoadBalanceProperties {
           }
           String propValue = lbParts[1];
           if (propValue.equalsIgnoreCase("true")) {
-            this.explicitFallbackOnly = true;
+            processedProperties.setExplicitFallbackOnly(true);
+          } else {
+            processedProperties.setExplicitFallbackOnly(false);
           }
         } else if (part.startsWith(failedHostReconnectDelayKey)) {
           String[] lbParts = part.split(EQUALS);
@@ -158,9 +158,8 @@ public class LoadBalanceProperties {
                 "Ignoring it.");
             continue;
           }
-          failedHostReconnectDelaySpecified = true;
-          failedHostReconnectDelaySecs = parseAndGetValue(lbParts[1],
-              DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS);
+          processedProperties.setFailedHostReconnectDelaySecs(parseAndGetValue(lbParts[1],
+              DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS));
         } else {
           if (sb.toString().contains("?")) {
             sb.append(PROPERTY_SEP);
@@ -172,34 +171,33 @@ public class LoadBalanceProperties {
       }
     }
     // Check properties bag also
-    if (originalProperties != null) {
-      if (originalProperties.containsKey(LOAD_BALANCE_PROPERTY_KEY)) {
-        String propValue = originalProperties.getProperty(LOAD_BALANCE_PROPERTY_KEY);
-        setLoadBalanceValue(propValue);
+    if (properties != null) {
+      if (properties.containsKey(LOAD_BALANCE_PROPERTY_KEY)) {
+        String propValue = properties.getProperty(LOAD_BALANCE_PROPERTY_KEY);
+        processedProperties.setLoadBalance(getLoadBalanceValue(propValue));
       }
-      if (originalProperties.containsKey(TOPOLOGY_AWARE_PROPERTY_KEY)) {
-        String propValue = originalProperties.getProperty(TOPOLOGY_AWARE_PROPERTY_KEY);
-        placements = propValue;
+      if (properties.containsKey(TOPOLOGY_AWARE_PROPERTY_KEY)) {
+        String propValue = properties.getProperty(TOPOLOGY_AWARE_PROPERTY_KEY);
+        processedProperties.setPlacements(propValue);
       }
-      if (originalProperties.containsKey(REFRESH_INTERVAL_KEY)) {
-        refreshIntervalSpecified = true;
-        refreshInterval = parseAndGetValue(originalProperties.getProperty(REFRESH_INTERVAL_KEY),
-            DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL);
+      if (properties.containsKey(REFRESH_INTERVAL_KEY)) {
+        processedProperties.setRefreshInterval(parseAndGetValue(properties.getProperty(REFRESH_INTERVAL_KEY),
+            DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL));
       }
-      if (originalProperties.containsKey(EXPLICIT_FALLBACK_ONLY_KEY)) {
-        String propValue = originalProperties.getProperty(EXPLICIT_FALLBACK_ONLY_KEY);
+      if (properties.containsKey(EXPLICIT_FALLBACK_ONLY_KEY)) {
+        String propValue = properties.getProperty(EXPLICIT_FALLBACK_ONLY_KEY);
         if (propValue.equalsIgnoreCase("true")) {
-          explicitFallbackOnly = true;
+          processedProperties.setExplicitFallbackOnly(true);
+        } else {
+          processedProperties.setExplicitFallbackOnly(false);
         }
       }
-      if (originalProperties.containsKey(FAILED_HOST_RECONNECT_DELAY_SECS_KEY)) {
-        failedHostReconnectDelaySpecified = true;
-        failedHostReconnectDelaySecs =
-            parseAndGetValue(originalProperties.getProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY),
-                DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS);
+      if (properties.containsKey(FAILED_HOST_RECONNECT_DELAY_SECS_KEY)) {
+        processedProperties.setFailedHostReconnectDelaySecs(parseAndGetValue(properties.getProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY),
+            DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS));
       }
     }
-    return sb.toString();
+    return processedProperties;
   }
 
   private void setLoadBalanceValue(String value) {
@@ -228,7 +226,7 @@ public class LoadBalanceProperties {
     }
   }
 
-  private int parseAndGetValue(String propValue, int defaultValue, int maxValue) {
+  private static int parseAndGetValue(String propValue, int defaultValue, int maxValue) {
     try {
       int value = Integer.parseInt(propValue);
       if (value < 0 || value > maxValue) {
@@ -259,10 +257,6 @@ public class LoadBalanceProperties {
     return placements;
   }
 
-  public String getStrippedURL() {
-    return ybURL;
-  }
-
   public LoadBalancer getAppropriateLoadBalancer(LoadBalancerKey key) {
     if (!isLoadBalanceEnabled()) {
       throw new IllegalStateException(
@@ -285,7 +279,7 @@ public class LoadBalanceProperties {
         synchronized (loadBalancerKeyToLoadBalancerMap) {
           ld = loadBalancerKeyToLoadBalancerMap.get(key);
           if (ld == null) {
-            ld = new ClusterAwareLoadBalancer(this.loadBalance, refreshInterval);
+            ld = new ClusterAwareLoadBalancer(this.loadBalance, refreshInterval, explicitFallbackOnly, failedHostReconnectDelaySecs);
             loadBalancerKeyToLoadBalancerMap.put(key, ld);
           }
         }
@@ -299,7 +293,7 @@ public class LoadBalanceProperties {
         synchronized (loadBalancerKeyToLoadBalancerMap) {
           ld = loadBalancerKeyToLoadBalancerMap.get(key);
           if (ld == null) {
-            ld = new TopologyAwareLoadBalancer(loadBalance, placements, explicitFallbackOnly);
+            ld = new TopologyAwareLoadBalancer(loadBalance, refreshInterval, placements, explicitFallbackOnly, failedHostReconnectDelaySecs);
             loadBalancerKeyToLoadBalancerMap.put(key, ld);
           }
         }
@@ -331,7 +325,7 @@ public class LoadBalanceProperties {
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
           if (ld == null) {
-            ld = new ClusterAwareLoadBalancer(this.loadBalance, refreshInterval);
+            ld = new ClusterAwareLoadBalancer(this.loadBalance, refreshInterval, explicitFallbackOnly, failedHostReconnectDelaySecs);
             CONNECTION_MANAGER_MAP.put(this.loadBalance.name(), ld);
           }
         }
@@ -346,7 +340,7 @@ public class LoadBalanceProperties {
         synchronized (CONNECTION_MANAGER_MAP) {
           ld = CONNECTION_MANAGER_MAP.get(key);
           if (ld == null) {
-            ld = new TopologyAwareLoadBalancer(loadBalance, placements, explicitFallbackOnly);
+            ld = new TopologyAwareLoadBalancer(loadBalance, refreshInterval, placements, explicitFallbackOnly, failedHostReconnectDelaySecs);
             CONNECTION_MANAGER_MAP.put(key, ld);
           }
         }
@@ -388,6 +382,54 @@ public class LoadBalanceProperties {
           url != null && url.equals(((LoadBalancerKey) other).url) &&
           properties != null &&
           properties.equals(((LoadBalancerKey) other).properties);
+    }
+  }
+
+  public static class ProcessedProperties{
+    private String placements;
+    private int refreshInterval;
+    private boolean explicitFallbackOnly;
+    private int failedHostReconnectDelaySecs;
+    private LoadBalanceService.LoadBalanceType loadBalance;
+
+    public int getFailedHostReconnectDelaySecs() {
+      return failedHostReconnectDelaySecs;
+    }
+
+    public void setFailedHostReconnectDelaySecs(int failedHostReconnectDelaySecs) {
+      this.failedHostReconnectDelaySecs = failedHostReconnectDelaySecs;
+    }
+
+    public String getPlacements() {
+      return placements;
+    }
+
+    public void setPlacements(String placements) {
+      this.placements = placements;
+    }
+
+    public int getRefreshInterval() {
+      return refreshInterval;
+    }
+
+    public void setRefreshInterval(int refreshInterval) {
+      this.refreshInterval = refreshInterval;
+    }
+
+    public boolean isExplicitFallbackOnly() {
+      return explicitFallbackOnly;
+    }
+
+    public void setExplicitFallbackOnly(boolean explicitFallbackOnly) {
+      this.explicitFallbackOnly = explicitFallbackOnly;
+    }
+
+    public LoadBalanceService.LoadBalanceType getLoadBalance() {
+      return loadBalance;
+    }
+
+    public void setLoadBalance(LoadBalanceService.LoadBalanceType loadBalance) {
+      this.loadBalance = loadBalance;
     }
   }
 }
