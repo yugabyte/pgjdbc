@@ -59,16 +59,16 @@ public class LoadBalanceService {
     useHostColumn = null;
   }
 
-  static long getLastRefreshTime() {
-    return lastRefreshTime;
+  static long getLastRefreshTime(LoadBalancer lb) {
+    return lb.getLastRefreshTime();
   }
 
-  private static boolean needsRefresh(long refreshInterval) {
+  private static boolean needsRefresh(long refreshInterval, LoadBalancer lb) {
     if (forceRefreshOnce) {
       LOGGER.fine("forceRefreshOnce is set to true");
       return true;
     }
-    long elapsed = (System.currentTimeMillis() - lastRefreshTime) / 1000;
+    long elapsed = (System.currentTimeMillis() - lb.getLastRefreshTime()) / 1000;
     if (elapsed >= refreshInterval) {
       LOGGER.fine("Needs refresh as list of servers may be stale or being fetched for "
           + "the first time, refreshInterval: " + refreshInterval);
@@ -183,7 +183,7 @@ public class LoadBalanceService {
       LOGGER.warning("Unable to identify set of addresses to use for establishing connections. "
           + "Using private addresses.");
     }
-    lastRefreshTime = System.currentTimeMillis();
+    lb.setLastRefreshTime(System.currentTimeMillis());
       if (cluster != null) {
         cluster.setClusterInfoMap(clusterInfoMap);
       }
@@ -205,6 +205,16 @@ public class LoadBalanceService {
     }
   }
 
+  public static int getLoad(String host) {
+    int load = 0;
+    for (String uuid : uuidToClusterInfoMap.keySet()) {
+      load = getLoad(uuid, host);
+      if (load != 0) {
+        break;
+      }
+    }
+    return load;
+  }
   static int getLoad(String uuid, String host) {
     NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
     return info == null ? 0 : info.connectionCount;
@@ -401,7 +411,7 @@ public class LoadBalanceService {
   private static synchronized String checkAndRefresh(LoadBalanceProperties.LoadBalancerKey key,
       LoadBalancer lb) {
     String uuid = lb.getUuid();
-    if (needsRefresh(lb.getRefreshListSeconds())) {
+    if (needsRefresh(lb.getRefreshListSeconds(), lb)) {
       String url = key.getUrl(); // todo original url should be fine instead of loadBalanceProperties.getStrippedURL();
       Properties properties = new Properties(key.getProperties());
       properties.setProperty("socketTimeout", "15");

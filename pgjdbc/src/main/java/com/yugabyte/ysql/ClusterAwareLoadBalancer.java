@@ -32,6 +32,16 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
   private boolean explicitFallbackOnly;
   private int failedHostReconnectDelaySecs;
 
+  public long getLastRefreshTime() {
+    return lastRefreshTime;
+  }
+
+  public void setLastRefreshTime(long lastRefreshTime) {
+    this.lastRefreshTime = lastRefreshTime;
+  }
+
+  private long lastRefreshTime;
+
   @Override
   public int getRefreshListSeconds() {
     return refreshListSeconds;
@@ -55,7 +65,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     } else {
       this.loadBalance = LoadBalanceType.FALSE;
     }
-    this.refreshListSeconds = refreshInterval;
+    this.refreshListSeconds = refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
+        refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
     this.explicitFallbackOnly = explicitFallbackOnly;
     this.failedHostReconnectDelaySecs = failedHostReconnectDelaySecs;
   }

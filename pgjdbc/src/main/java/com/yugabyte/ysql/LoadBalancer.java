@@ -37,5 +37,7 @@ public interface LoadBalancer {
 
   void setUuid(String uuid);
   String getUuid();
+  long getLastRefreshTime();
+  void setLastRefreshTime(long lastRefreshTime);
 
 }

@@ -58,6 +58,16 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private byte requestFlags;
   private int failedHostReconnectDelaySecs;
 
+  public long getLastRefreshTime() {
+    return lastRefreshTime;
+  }
+
+  public void setLastRefreshTime(long lastRefreshTime) {
+    this.lastRefreshTime = lastRefreshTime;
+  }
+
+  private long lastRefreshTime;
+
   public TopologyAwareLoadBalancer(LoadBalanceType lb, int refreshInterval, String placementValues, boolean onlyExplicitFallback, int failedHostReconnectDelaySecs) {
     if (lb != null) {
       loadBalance = lb;
@@ -164,7 +174,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts);
     // Reset currentPlacementIndex if it's a new request AND refresh() happened after the
     // last request was processed
-    if (newRequest && (LoadBalanceService.getLastRefreshTime() - lastRequestTime >= 0)) {
+    if (newRequest && (LoadBalanceService.getLastRefreshTime(this) - lastRequestTime >= 0)) {
       currentPlacementIndex = PRIMARY_PLACEMENTS_INDEX;
     } else {
       LOGGER.fine("Placements: [" + placements
