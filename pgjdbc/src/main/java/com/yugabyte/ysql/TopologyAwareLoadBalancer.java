@@ -77,7 +77,6 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     placements = placementValues;
     explicitFallbackOnly = onlyExplicitFallback;
     refreshIntervalSeconds = refreshInterval;
-//     refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);
     this.failedHostReconnectDelaySecs = failedHostReconnectDelaySecs;
     parseGeoLocations();
   }

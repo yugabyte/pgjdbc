@@ -295,7 +295,6 @@ public class LoadBalanceService {
   }
 
   private static LoadBalancer getLB(LoadBalanceProperties.LoadBalancerKey key) {
-    // todo check to avoid NPE
     LoadBalancer lb = null;
     if (lbKeyToUuidMap.get(key) != null) {
       lb = uuidToClusterInfoMap.get(lbKeyToUuidMap.get(key)).getLbKeyToLBMap().get(key);
@@ -342,18 +341,15 @@ public class LoadBalanceService {
         return conn;
       }
       LOGGER.warning("Failed to apply load balance. Trying normal connection");
-      // we do not set PGHOST/PGPORT because we still have original properties in LBkey
-//       properties.setProperty("PGHOST", key.getProperties().getProperty("PGHOST"));
-//       properties.setProperty("PGPORT", key.getProperties().getProperty("PGPORT"));
     }
     return null;
   }
 
   private static Connection getConnection(LoadBalanceProperties.LoadBalancerKey key,
       Properties props, ArrayList<String> timedOutHosts) {
-    LoadBalancer lb = getLB(key); // we have the uuid now unless it is an older YBDB Cluster todo handle that case
+    LoadBalancer lb = getLB(key);
     String uuid = lbKeyToUuidMap.get(key);
-    String url = key.getUrl(); // todo even original url should be fine instead of loadBalanceProperties.getStrippedURL();
+    String url = key.getUrl();
 
     if (checkAndRefresh(key, lb) == null) {
       LOGGER.fine("Attempt to refresh info from yb_servers() failed");
@@ -413,7 +409,7 @@ public class LoadBalanceService {
       LoadBalancer lb) {
     String uuid = lb.getUuid();
     if (needsRefresh(lb.getRefreshListSeconds(), lb)) {
-      String url = key.getUrl(); // todo original url should be fine instead of loadBalanceProperties.getStrippedURL();
+      String url = key.getUrl();
       Properties properties = new Properties(key.getProperties());
       properties.setProperty("socketTimeout", "15");
       HostSpec[] hspec = hostSpecs(properties);
