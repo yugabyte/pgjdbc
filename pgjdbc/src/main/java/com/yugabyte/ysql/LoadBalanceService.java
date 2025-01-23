@@ -109,14 +109,15 @@ public class LoadBalanceService {
         lb.setUuid(uuid);
       }
       if (cluster == null){
-        cluster = uuidToClusterInfoMap.containsKey(lb.getUuid())? uuidToClusterInfoMap.get(uuid): new ClusterInfo();
+        if (uuidToClusterInfoMap.containsKey(uuid)){
+          cluster = uuidToClusterInfoMap.get(uuid);
+          conn.close();
+        } else {
+          cluster = new ClusterInfo();
+          cluster.setControlConnection(conn);
+        }
       }
-      if (cluster.getControlConnection() == null) {
-        cluster.setControlConnection(conn);
-      }
-      // TODO : Discuss how to set clusterinfomap
-      if
-      (clusterInfoMap == null) {
+      if (clusterInfoMap == null) {
         clusterInfoMap = cluster.getClusterInfoMap() != null? cluster.getClusterInfoMap(): new ConcurrentHashMap<>();
       }
       NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
@@ -625,7 +626,6 @@ public class LoadBalanceService {
     private ConcurrentHashMap<String, LoadBalanceService.NodeInfo> clusterInfoMap;
     private long lastRefreshTime;
     private Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> lbKeyToLBMap = new ConcurrentHashMap<>();
-
     public Connection getControlConnection() {
       return controlConnection;
     }
@@ -650,5 +650,8 @@ public class LoadBalanceService {
       return lastRefreshTime;
     }
 
+    public void setLastRefreshTime(long lastRefreshTime) {
+      this.lastRefreshTime = lastRefreshTime;
+    }
   }
 }
