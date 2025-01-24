@@ -26,9 +26,6 @@ public class LoadBalanceService {
   private static Boolean useHostColumn = null;
   public static Map<String, ClusterInfo> uuidToClusterInfoMap = new ConcurrentHashMap<>();
   public static Map<LoadBalanceProperties.LoadBalancerKey, String> lbKeyToUuidMap = new ConcurrentHashMap<>();
-  private Connection controlConnection = null;
-  private ConcurrentHashMap<String, LoadBalanceService.NodeInfo> nodeInfoMap;
-
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -407,7 +404,10 @@ public class LoadBalanceService {
    */
   private static synchronized String checkAndRefresh(LoadBalanceProperties.LoadBalancerKey key,
       LoadBalancer lb) {
-    String uuid = lb.getUuid();
+    String uuid = null;
+    if (lb != null) {
+      uuid = lb.getUuid();
+    }
     if (needsRefresh(lb.getRefreshListSeconds(), lb)) {
       String url = key.getUrl();
       Properties properties = new Properties(key.getProperties());
@@ -419,10 +419,6 @@ public class LoadBalanceService {
         boolean refreshFailed = false;
         try {
           controlConnection = new PgConnection(hspec, properties, url);
-          if (uuid != null){
-            controlConnection.close();
-            controlConnection = uuidToClusterInfoMap.get(uuid).getControlConnection();
-          }
           try {
             uuid = refresh(controlConnection, lb.getRefreshListSeconds(), lb);
             break;
