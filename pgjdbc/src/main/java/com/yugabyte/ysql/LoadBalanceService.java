@@ -16,12 +16,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -130,14 +125,14 @@ public class LoadBalanceService {
       try {
         hostInetAddr = InetAddress.getByName(host);
       } catch (UnknownHostException e) {
-        // set the hostInet to null
+        LOGGER.fine("Failed to get host '" + host + "' by name");
         hostInetAddr = null;
       }
       try {
         publicHostInetAddr = !publicHost.isEmpty()
             ? InetAddress.getByName(publicHost) : null;
       } catch (UnknownHostException e) {
-        // set the publicHostInetAddr to null
+        LOGGER.fine("Failed to get public_ip '" + publicHost + "' by name");
         publicHostInetAddr = null;
       }
       if (useHostColumn == null) {
@@ -145,14 +140,17 @@ public class LoadBalanceService {
           useHostColumn = Boolean.TRUE;
         } else if (hostConnectedInetAddress.equals(publicHostInetAddr)) {
           useHostColumn = Boolean.FALSE;
+        } else if (hostInetAddr != null && hostInetAddr.equals(publicHostInetAddr)) {
+          // Both host and public_ip are same
+          useHostColumn = Boolean.TRUE;
         }
       }
     }
     if ((useHostColumn != null && !useHostColumn) || (useHostColumn == null && publicIPsGivenForAll)) {
       LOGGER.info("Will be using publicIPs for establishing connections");
-      Enumeration<String> hosts = clusterInfoMap.keys();
-      while (hosts.hasMoreElements()) {
-        NodeInfo info = clusterInfoMap.get(hosts.nextElement());
+      ArrayList<String> hosts = Collections.list(clusterInfoMap.keys());
+      for (String host : hosts) {
+        NodeInfo info = clusterInfoMap.get(host);
         clusterInfoMap.remove(info.host);
         clusterInfoMap.put(info.publicIP, info);
       }
