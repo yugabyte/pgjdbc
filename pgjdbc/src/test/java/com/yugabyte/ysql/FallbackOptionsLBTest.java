@@ -310,7 +310,7 @@ public class FallbackOptionsLBTest {
       if ("skip".equals(multipurposeParam)) {
         return;
       }
-      int recorded = LoadBalanceService.getLoad( server);
+      int recorded = LoadBalanceService.getLoad(server);
       if (server.equalsIgnoreCase(multipurposeParam)) {
         // Account for control connection
         expectedCount -= 1;

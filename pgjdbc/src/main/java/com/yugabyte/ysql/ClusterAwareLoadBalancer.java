@@ -22,9 +22,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 public class ClusterAwareLoadBalancer implements LoadBalancer {
-  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
-
-  private static volatile ClusterAwareLoadBalancer instance; // todo how is this working for RR support?
+  protected static final Logger LOGGER =
+      Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
   private List<String> attempted = new ArrayList<>();
   private final LoadBalanceService.LoadBalanceType loadBalance;
   private byte requestFlags;
@@ -59,38 +58,23 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval, boolean explicitFallbackOnly, int failedHostReconnectDelaySecs) {
+  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval,
+      boolean explicitFallbackOnly, int failedHostReconnectDelaySecs) {
     if (lb != null) {
       this.loadBalance = lb;
     } else {
       this.loadBalance = LoadBalanceType.FALSE;
     }
-    this.refreshListSeconds = refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
+    this.refreshListSeconds =
+        refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
         refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
     this.explicitFallbackOnly = explicitFallbackOnly;
     this.failedHostReconnectDelaySecs = failedHostReconnectDelaySecs;
   }
 
-  public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalanceType lb,
-      int refreshListSeconds, boolean explicitFallbackOnly, int failedHostReconnectDelaySecs) {
-    if (instance == null) {
-      synchronized (ClusterAwareLoadBalancer.class) {
-        if (instance == null) {
-          instance = new ClusterAwareLoadBalancer(lb, refreshListSeconds, explicitFallbackOnly, failedHostReconnectDelaySecs);
-          instance.refreshListSeconds =
-              refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
-                  refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
-          LOGGER.fine("Created a new cluster-aware LB instance with loadbalance = " +
-              instance.loadBalance + " and refresh interval " + instance.refreshListSeconds + " seconds");
-        }
-      }
-    }
-    return instance;
-  }
-
   public String toString() {
     return this.getClass().getSimpleName() + ": loadBalance = " +
-      loadBalance + ", refreshInterval = " + refreshListSeconds;
+        loadBalance + ", refreshInterval = " + refreshListSeconds;
   }
 
   @Override
@@ -98,7 +82,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       Byte requestFlags) {
     // e.getKey() is the hostname
     return !attempted.contains(e.getKey()) && !e.getValue().isDown()
-        && LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
+        && LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(),
+        requestFlags);
   }
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
@@ -151,8 +136,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     if (chosenHost == null && (loadBalance == LoadBalanceType.ONLY_PRIMARY ||
         loadBalance == LoadBalanceType.ONLY_RR)) {
       throw new IllegalStateException("No node available in "
-        + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" : "read-replica")
-        + " cluster to connect to.");
+          + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" : "read-replica")
+          + " cluster to connect to.");
     }
     return chosenHost;
   }

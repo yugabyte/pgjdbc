@@ -35,9 +35,24 @@ public interface LoadBalancer {
    */
   int getRefreshListSeconds();
 
+  /**
+   * @param uuid  universe_uuid of the cluster
+   */
   void setUuid(String uuid);
+
+  /**
+   * @return the universe_uuid of the cluster
+   */
   String getUuid();
+
+  /**
+   * @return the last time the cluster was refreshed
+   */
   long getLastRefreshTime();
+
+  /**
+   * @param lastRefreshTime the last time the cluster was refreshed
+   */
   void setLastRefreshTime(long lastRefreshTime);
 
 }

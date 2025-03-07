@@ -20,12 +20,12 @@ import java.util.logging.Logger;
 public class LoadBalanceService {
   static final byte STRICT_PREFERENCE = 0b00000001;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
-  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
-  private static long lastRefreshTime;
+  protected static final Logger LOGGER =
+      Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static boolean forceRefreshOnce = false;
-  private static Boolean useHostColumn = null;
   public static Map<String, ClusterInfo> uuidToClusterInfoMap = new ConcurrentHashMap<>();
-  public static Map<LoadBalanceProperties.LoadBalancerKey, String> lbKeyToUuidMap = new ConcurrentHashMap<>();
+  public static Map<LoadBalanceProperties.LoadBalancerKey, String> lbKeyToUuidMap =
+      new ConcurrentHashMap<>();
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -35,7 +35,7 @@ public class LoadBalanceService {
     System.out.println("-------------------");
     for (Map.Entry<String, ClusterInfo> c : uuidToClusterInfoMap.entrySet()) {
       System.out.println("Cluster uuid: " + c.getKey());
-      for (Map.Entry<String, NodeInfo> e : c.getValue().clusterInfoMap.entrySet()) {
+      for (Map.Entry<String, NodeInfo> e : c.getValue().hostToNodeInfoMap.entrySet()) {
         System.out.println(e.getKey() + " - " + e.getValue().connectionCount);
       }
     }
@@ -47,13 +47,18 @@ public class LoadBalanceService {
   static synchronized void clear() throws SQLException {
     LOGGER.warning("Clearing LoadBalanceService state for testing purposes");
     uuidToClusterInfoMap.clear();
-//     if (controlConnection != null) {
-//       controlConnection.close();
-//       controlConnection = null;
-//     }
-    lastRefreshTime = 0;
+    for (Map.Entry<String, ClusterInfo> c : uuidToClusterInfoMap.entrySet()) {
+      if (c.getValue().controlConnection != null) {
+        c.getValue().controlConnection.close();
+        c.getValue().controlConnection = null;
+      }
+      c.getValue().setUseHostColumn(null);
+      for (Map.Entry<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> l :
+          c.getValue().lbKeyToLBMap.entrySet()) {
+        l.getValue().setLastRefreshTime(0);
+      }
+    }
     forceRefreshOnce = false;
-    useHostColumn = null;
   }
 
   static long getLastRefreshTime(LoadBalancer lb) {
@@ -75,13 +80,21 @@ public class LoadBalanceService {
     return false;
   }
 
-  private static synchronized String refresh(Connection conn, long refreshInterval, LoadBalancer lb) throws SQLException {
+  /**
+   * @param conn            Control connection to the cluster
+   * @param refreshInterval The interval at which refresh is done
+   * @param lb              The load balancer for this connection
+   * @return the value of the universe_uuid of the cluster
+   * @throws SQLException
+   */
+  private static synchronized String refresh(Connection conn, long refreshInterval,
+      LoadBalancer lb) throws SQLException {
     forceRefreshOnce = false;
     Statement st = conn.createStatement();
     LOGGER.fine("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
-    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> clusterInfoMap = null;
+    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> hostToNodeInfoMap = null;
     boolean publicIPsGivenForAll = true;
     String uuid = null;
     ClusterInfo cluster = null;
@@ -95,29 +108,29 @@ public class LoadBalanceService {
       String region = rs.getString("region");
       String zone = rs.getString("zone");
       String nodeType = rs.getString("node_type");
-      try{
+      try {
         uuid = rs.getString("universe_uuid");
-      } catch (Exception e){
-        LOGGER.warning("Connections being made to an older version of yugabytedb with universe uuid not present in yb_servers() function. Multi cluster connections are not supported in case of two such clusters");
+      } catch (PSQLException e) {
+        LOGGER.warning("Found a version of YugabyteDB which does not send universe_uuid in its "
+            + "response of yb_servers() function. Having more than one such clusters is not "
+            + "supported.");
         uuid = "default";
       }
 
-      if (lb.getUuid() == null){
-        lb.setUuid(uuid);
-      }
-      if (cluster == null){
-        if (uuidToClusterInfoMap.containsKey(uuid)){
+      if (cluster == null) {
+        if (uuidToClusterInfoMap.containsKey(uuid)) {
           cluster = uuidToClusterInfoMap.get(uuid);
-          conn.close();
         } else {
           cluster = new ClusterInfo();
           cluster.setControlConnection(conn);
         }
       }
-      if (clusterInfoMap == null) {
-        clusterInfoMap = cluster.getClusterInfoMap() != null? cluster.getClusterInfoMap(): new ConcurrentHashMap<>();
+      if (hostToNodeInfoMap == null) {
+        hostToNodeInfoMap = cluster.getHostToNodeInfoMap() != null ?
+            cluster.getHostToNodeInfoMap() : new ConcurrentHashMap<>();
       }
-      NodeInfo nodeInfo = clusterInfoMap.containsKey(host) ? clusterInfoMap.get(host) : new NodeInfo();
+      NodeInfo nodeInfo = hostToNodeInfoMap.containsKey(host) ? hostToNodeInfoMap.get(host) :
+          new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
         nodeInfo.publicIP = publicHost;
@@ -128,20 +141,24 @@ public class LoadBalanceService {
         try {
           nodeInfo.port = Integer.valueOf(port);
         } catch (NumberFormatException nfe) {
-          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 instead.");
+          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 "
+              + "instead.");
           nodeInfo.port = 5433;
         }
-        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, DEFAULT_FAILED_HOST_TTL_SECONDS);
+        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY,
+            DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has elapsed");
+            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay"
+                + "-secs (" + failedHostTTL + "s) has elapsed");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
+            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay"
+                + "-secs (" + failedHostTTL + "s) has not elapsed");
           }
         }
       }
-      clusterInfoMap.putIfAbsent(host, nodeInfo);
+      hostToNodeInfoMap.putIfAbsent(host, nodeInfo);
 
       InetAddress hostInetAddr;
       InetAddress publicHostInetAddr;
@@ -158,39 +175,50 @@ public class LoadBalanceService {
         LOGGER.fine("Failed to get public_ip '" + publicHost + "' by name");
         publicHostInetAddr = null;
       }
-      if (useHostColumn == null) {
+      if (cluster.getUseHostColumn() == null) {
         if (hostConnectedInetAddress.equals(hostInetAddr)) {
-          useHostColumn = Boolean.TRUE;
+          cluster.setUseHostColumn(Boolean.TRUE);
         } else if (hostConnectedInetAddress.equals(publicHostInetAddr)) {
-          useHostColumn = Boolean.FALSE;
+          cluster.setUseHostColumn(Boolean.FALSE);
         } else if (hostInetAddr != null && hostInetAddr.equals(publicHostInetAddr)) {
           // Both host and public_ip are same
-          useHostColumn = Boolean.TRUE;
+          cluster.setUseHostColumn(Boolean.TRUE);
         }
       }
     }
-    if ((useHostColumn != null && !useHostColumn) || (useHostColumn == null && publicIPsGivenForAll)) {
-      LOGGER.info("Will be using publicIPs for establishing connections");
-      ArrayList<String> hosts = Collections.list(clusterInfoMap.keys());
-      for (String host : hosts) {
-        NodeInfo info = clusterInfoMap.get(host);
-        clusterInfoMap.remove(info.host);
-        clusterInfoMap.put(info.publicIP, info);
+    
+    if (lb.getUuid() == null) {
+      if (uuidToClusterInfoMap.containsKey(uuid)) {
+        conn.close();
       }
-    } else if (useHostColumn == null) {
+      lb.setUuid(uuid);
+    }
+    if ((cluster.getUseHostColumn() != null && !cluster.getUseHostColumn()) || (cluster.getUseHostColumn() == null && publicIPsGivenForAll)) {
+      LOGGER.info("Will be using publicIPs for establishing connections");
+      ArrayList<String> hosts = Collections.list(hostToNodeInfoMap.keys());
+      for (String host : hosts) {
+        NodeInfo info = hostToNodeInfoMap.get(host);
+        hostToNodeInfoMap.remove(info.host);
+        hostToNodeInfoMap.put(info.publicIP, info);
+      }
+    } else if (cluster.getUseHostColumn() == null) {
       LOGGER.warning("Unable to identify set of addresses to use for establishing connections. "
           + "Using private addresses.");
     }
     lb.setLastRefreshTime(System.currentTimeMillis());
-      if (cluster != null) {
-        cluster.setClusterInfoMap(clusterInfoMap);
-      }
-      uuidToClusterInfoMap.putIfAbsent(uuid, cluster);
+    if (cluster != null) {
+      cluster.setHostToNodeInfoMap(hostToNodeInfoMap);
+    }
+    uuidToClusterInfoMap.putIfAbsent(uuid, cluster);
     return uuid;
   }
 
   private static void markAsFailed(String uuid, String host) {
-    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
+    if (uuid == null) {
+      LOGGER.fine("Could not mark down host: " + host + ". UUID not present");
+      return;
+    }
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     if (info == null) {
       return; // unexpected
     }
@@ -206,21 +234,34 @@ public class LoadBalanceService {
   public static int getLoad(String host) {
     int load = 0;
     for (String uuid : uuidToClusterInfoMap.keySet()) {
-      load = getLoad(uuid, host);
+      if (uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().containsKey(host)) {
+        return getLoad(uuid, host);
+      }
       if (load != 0) {
         break;
       }
     }
     return load;
   }
+
   static int getLoad(String uuid, String host) {
-    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
+    if (uuid == null) {
+      LOGGER.fine("Could not get the load on host:" + host + ". UUID not present");
+      return -1;
+    }
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     return info == null ? 0 : info.connectionCount;
   }
 
-  static ArrayList<String> getAllEligibleHosts(String uuid, LoadBalancer policy, Byte requestFlags) {
+  static ArrayList<String> getAllEligibleHosts(String uuid, LoadBalancer policy,
+      Byte requestFlags) {
     ArrayList<String> list = new ArrayList<>();
-    Set<Map.Entry<String, NodeInfo>> set = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().entrySet();
+    if (uuid == null) {
+      LOGGER.fine("Could not retrieve the eligible hosts for the loadbalancer. UUID not present");
+      return list;
+    }
+    Set<Map.Entry<String, NodeInfo>> set =
+        uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().entrySet();
     for (Map.Entry<String, NodeInfo> e : set) {
       if (policy.isHostEligible(e, requestFlags)) {
         list.add(e.getKey());
@@ -233,13 +274,15 @@ public class LoadBalanceService {
 
   private static ArrayList<String> getAllAvailableHosts(String uuid, ArrayList<String> attempted) {
     ArrayList<String> list = new ArrayList<>();
-    if (uuid == null)
+    if (uuid == null) {
       return list;
-    ConcurrentHashMap<String, NodeInfo> clusterInfoMap = uuidToClusterInfoMap.get(uuid).getClusterInfoMap();
-    Enumeration<String> hosts = clusterInfoMap.keys();
+    }
+    ConcurrentHashMap<String, NodeInfo> hostToNodeInfoMap =
+        uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
+    Enumeration<String> hosts = hostToNodeInfoMap.keys();
     while (hosts.hasMoreElements()) {
       String h = hosts.nextElement();
-      if (!attempted.contains(h) && !clusterInfoMap.get(h).isDown) {
+      if (!attempted.contains(h) && !hostToNodeInfoMap.get(h).isDown) {
         list.add(h);
       }
     }
@@ -247,12 +290,20 @@ public class LoadBalanceService {
   }
 
   private static int getPort(String uuid, String host) {
-    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
+    if (uuid == null) {
+      LOGGER.fine("Could not get the port for host:" + host + ". UUID not present");
+      return -1;
+    }
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     return info != null ? info.port : 5433;
   }
 
   static boolean incrementConnectionCount(String uuid, String host) {
-    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
+    if (uuid == null) {
+      LOGGER.fine("Could not increment connection count for host:" + host + ". UUID not present");
+      return false;
+    }
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     if (info != null) {
       synchronized (info) {
         if (info.connectionCount < 0) {
@@ -276,14 +327,19 @@ public class LoadBalanceService {
   }
 
   public static boolean decrementConnectionCount(String uuid, String host) {
-    NodeInfo info = uuidToClusterInfoMap.get(uuid).getClusterInfoMap().get(host);
+    if (uuid == null) {
+      LOGGER.fine("Could not decrement connection count for host:" + host + ". UUID not present");
+      return false;
+    }
+    NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     if (info != null) {
       synchronized (info) {
         info.connectionCount -= 1;
-        LOGGER.fine("Decremented connection count for " + host + " by one: " + info.connectionCount);
+        LOGGER.fine("Decremented connection count for " + host + " in uuid: " + uuid + " by one: "
+            + info.connectionCount);
         if (info.connectionCount < 0) {
           info.connectionCount = 0;
-          LOGGER.fine("Resetting connection count for " + host + " to zero.");
+          LOGGER.fine("Resetting connection count for " + host + " to zero in uuid: " + uuid);
         }
         return true;
       }
@@ -297,14 +353,23 @@ public class LoadBalanceService {
       lb = uuidToClusterInfoMap.get(lbKeyToUuidMap.get(key)).getLbKeyToLBMap().get(key);
     }
     if (lb == null) {
-      // 1. process the url and properties and create a new LoadBalancer instance -- refer to LBProperties.processURLAndProperties()
-      LoadBalanceProperties.ProcessedProperties processedProperties = LoadBalanceProperties.processURLAndProperties(key.getUrl(), key.getProperties());
+      // 1. process the url and properties and create a new LoadBalancer instance -- refer to
+      // LBProperties.processURLAndProperties()
+      LoadBalanceProperties.ProcessedProperties processedProperties =
+          LoadBalanceProperties.processURLAndProperties(key.getUrl(), key.getProperties());
       if (processedProperties.getPlacements() == null) {
-        lb = new ClusterAwareLoadBalancer(processedProperties.getLoadBalance(), processedProperties.getRefreshInterval(), processedProperties.isExplicitFallbackOnly(), processedProperties.getFailedHostReconnectDelaySecs());
+        lb = new ClusterAwareLoadBalancer(processedProperties.getLoadBalance(),
+            processedProperties.getRefreshInterval(),
+            processedProperties.isExplicitFallbackOnly(),
+            processedProperties.getFailedHostReconnectDelaySecs());
       } else {
-        lb = new TopologyAwareLoadBalancer(processedProperties.getLoadBalance(), processedProperties.getRefreshInterval(), processedProperties.getPlacements(), processedProperties.isExplicitFallbackOnly(), processedProperties.getFailedHostReconnectDelaySecs());
+        lb = new TopologyAwareLoadBalancer(processedProperties.getLoadBalance(),
+            processedProperties.getRefreshInterval(), processedProperties.getPlacements(),
+            processedProperties.isExplicitFallbackOnly(),
+            processedProperties.getFailedHostReconnectDelaySecs());
       }
-      // 2. create control connection and fetch yb_servers() -- refer to LBProperties.checkAndRefresh()
+      // 2. create control connection and fetch yb_servers() -- refer to LBProperties
+      // .checkAndRefresh()
       String uuid = checkAndRefresh(key, lb);
       if (uuid == null) {
         LOGGER.fine("Attempt to refresh info from yb_servers() failed");
@@ -312,7 +377,12 @@ public class LoadBalanceService {
       }
 
       // 3. check if there is an entry in uuidToClusterInfoMap for the received uuid
-      if (uuidToClusterInfoMap.containsKey(uuid)){
+      // 4. If yes, add the LB instance to its ClusterInfo instance against this LBkey
+      // 5. If no, create a new ClusterInfo instance and set control connection, clusterInfoMap,
+      // etc. against the received uuid in uuidToClusterInfoMap
+      // 6. Also, add its entry in lbKeyToUuidMap
+
+      if (uuidToClusterInfoMap.containsKey(uuid)) {
         ClusterInfo cluster = uuidToClusterInfoMap.get(uuid);
         cluster.getLbKeyToLBMap().put(key, lb);
         lbKeyToUuidMap.putIfAbsent(key, uuid);
@@ -322,9 +392,6 @@ public class LoadBalanceService {
         uuidToClusterInfoMap.put(uuid, cluster);
         lbKeyToUuidMap.putIfAbsent(key, uuid);
       }
-      // 4. If yes, add the LB instance to its ClusterInfo instance against this LBkey
-      // 5. If no, create a new ClusterInfo instance and set control connection, clusterInfoMap, etc. against the received uuid in uuidToClusterInfoMap
-      // 6. Also, add its entry in lbKeyToUuidMap
     }
     return lb;
   }
@@ -345,6 +412,10 @@ public class LoadBalanceService {
   private static Connection getConnection(LoadBalanceProperties.LoadBalancerKey key,
       Properties props, ArrayList<String> timedOutHosts) {
     LoadBalancer lb = getLB(key);
+    if (lb == null) {
+      LOGGER.fine("No loadbalancer found for lbkey: " + key);
+      return null;
+    }
     String uuid = lbKeyToUuidMap.get(key);
     String url = key.getUrl();
 
@@ -399,8 +470,8 @@ public class LoadBalanceService {
 
   /**
    * @param key
-   * @param lb LoadBalancer instance
-   * @return true if the refresh was not required or if it was successful.
+   * @param lb  LoadBalancer instance
+   * @return universe_uuid if the refresh was not required or if it was successful.
    */
   private static synchronized String checkAndRefresh(LoadBalanceProperties.LoadBalancerKey key,
       LoadBalancer lb) {
@@ -418,7 +489,11 @@ public class LoadBalanceService {
       while (true) {
         boolean refreshFailed = false;
         try {
-          controlConnection = new PgConnection(hspec, properties, url);
+          if (uuid != null) {
+            controlConnection = uuidToClusterInfoMap.get(uuid).getControlConnection();
+          } else {
+            controlConnection = new PgConnection(hspec, properties, url);
+          }
           try {
             uuid = refresh(controlConnection, lb.getRefreshListSeconds(), lb);
             break;
@@ -430,7 +505,8 @@ public class LoadBalanceService {
         } catch (SQLException ex) {
           if (refreshFailed) {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
-            String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
+            String failed =
+                ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(uuid, failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
@@ -615,9 +691,11 @@ public class LoadBalanceService {
 
   public static class ClusterInfo {
     private Connection controlConnection;
-    private ConcurrentHashMap<String, LoadBalanceService.NodeInfo> clusterInfoMap;
-    private long lastRefreshTime;
-    private Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> lbKeyToLBMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, LoadBalanceService.NodeInfo> hostToNodeInfoMap;
+    private Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> lbKeyToLBMap =
+        new ConcurrentHashMap<>();
+    private Boolean useHostColumn = null;
+
     public Connection getControlConnection() {
       return controlConnection;
     }
@@ -626,24 +704,25 @@ public class LoadBalanceService {
       this.controlConnection = controlConnection;
     }
 
-    public ConcurrentHashMap<String, NodeInfo> getClusterInfoMap() {
-      return clusterInfoMap;
+    public ConcurrentHashMap<String, NodeInfo> getHostToNodeInfoMap() {
+      return hostToNodeInfoMap;
     }
 
-    public void setClusterInfoMap(ConcurrentHashMap<String, NodeInfo> clusterInfoMap) {
-      this.clusterInfoMap = clusterInfoMap;
+    public void setHostToNodeInfoMap(ConcurrentHashMap<String, NodeInfo> hostToNodeInfoMap) {
+      this.hostToNodeInfoMap = hostToNodeInfoMap;
     }
 
     public Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> getLbKeyToLBMap() {
       return lbKeyToLBMap;
     }
 
-    public long getLastRefreshTime() {
-      return lastRefreshTime;
+    public Boolean getUseHostColumn() {
+      return useHostColumn;
     }
 
-    public void setLastRefreshTime(long lastRefreshTime) {
-      this.lastRefreshTime = lastRefreshTime;
+    public void setUseHostColumn(Boolean useHostColumn) {
+      this.useHostColumn = useHostColumn;
     }
+
   }
 }
