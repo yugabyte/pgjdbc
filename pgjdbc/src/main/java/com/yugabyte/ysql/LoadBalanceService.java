@@ -359,30 +359,19 @@ public class LoadBalanceService {
       } else {
         lb = new TopologyAwareLoadBalancer(processedProperties);
       }
-      // 2. create control connection and fetch yb_servers() -- refer to LBProperties
-      // .checkAndRefresh()
+      // 2. create control connection and fetch yb_servers() -- refer to LBProperties.checkAndRefresh()
       String uuid = checkAndRefresh(key, lb);
       if (uuid == null) {
         LOGGER.fine("Attempt to refresh info from yb_servers() failed");
         return null;
       }
 
-      // 3. check if there is an entry in uuidToClusterInfoMap for the received uuid
-      // 4. If yes, add the LB instance to its ClusterInfo instance against this LBkey
-      // 5. If no, create a new ClusterInfo instance and set control connection, clusterInfoMap,
-      // etc. against the received uuid in uuidToClusterInfoMap
-      // 6. Also, add its entry in lbKeyToUuidMap
+      // 3. Set the loadbalancer against the lbkey in the ClusterInfo
+      ClusterInfo cluster = uuidToClusterInfoMap.get(uuid);
+      cluster.getLbKeyToLBMap().put(key, lb);
 
-      if (uuidToClusterInfoMap.containsKey(uuid)) {
-        ClusterInfo cluster = uuidToClusterInfoMap.get(uuid);
-        cluster.getLbKeyToLBMap().put(key, lb);
-        lbKeyToUuidMap.putIfAbsent(key, uuid);
-      } else {
-        ClusterInfo cluster = new ClusterInfo();
-        cluster.getLbKeyToLBMap().put(key, lb);
-        uuidToClusterInfoMap.put(uuid, cluster);
-        lbKeyToUuidMap.putIfAbsent(key, uuid);
-      }
+      // 4. Put the lbkey in lbKeyToUuidMap if absent
+      lbKeyToUuidMap.putIfAbsent(key, uuid);
     }
     return lb;
   }
