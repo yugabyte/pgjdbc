@@ -58,18 +58,19 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
 
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval,
-      boolean explicitFallbackOnly, int failedHostReconnectDelaySecs) {
+  public ClusterAwareLoadBalancer(LoadBalanceProperties.ProcessedProperties processedProperties) {
+    LoadBalanceType lb = processedProperties.getLoadBalance();
     if (lb != null) {
       this.loadBalance = lb;
     } else {
       this.loadBalance = LoadBalanceType.FALSE;
     }
+    int refreshInterval = processedProperties.getRefreshInterval();
     this.refreshListSeconds =
         refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
-        refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
-    this.explicitFallbackOnly = explicitFallbackOnly;
-    this.failedHostReconnectDelaySecs = failedHostReconnectDelaySecs;
+            refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+    this.explicitFallbackOnly = processedProperties.isExplicitFallbackOnly();
+    this.failedHostReconnectDelaySecs = processedProperties.getFailedHostReconnectDelaySecs();
   }
 
   public String toString() {

@@ -111,8 +111,8 @@ public class LoadBalanceService {
       try {
         uuid = rs.getString("universe_uuid");
       } catch (PSQLException e) {
-        LOGGER.warning("Found a version of YugabyteDB which does not send universe_uuid in its "
-            + "response of yb_servers() function. Having more than one such clusters is not "
+        LOGGER.info("Found a version of YugabyteDB which does not send universe_uuid in its "
+            + "response of yb_servers() function. Connecting to more than one such clusters is not "
             + "supported.");
         uuid = "default";
       }
@@ -237,9 +237,6 @@ public class LoadBalanceService {
       if (uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().containsKey(host)) {
         return getLoad(uuid, host);
       }
-      if (load != 0) {
-        break;
-      }
     }
     return load;
   }
@@ -358,15 +355,9 @@ public class LoadBalanceService {
       LoadBalanceProperties.ProcessedProperties processedProperties =
           LoadBalanceProperties.processURLAndProperties(key.getUrl(), key.getProperties());
       if (processedProperties.getPlacements() == null) {
-        lb = new ClusterAwareLoadBalancer(processedProperties.getLoadBalance(),
-            processedProperties.getRefreshInterval(),
-            processedProperties.isExplicitFallbackOnly(),
-            processedProperties.getFailedHostReconnectDelaySecs());
+        lb = new ClusterAwareLoadBalancer(processedProperties);
       } else {
-        lb = new TopologyAwareLoadBalancer(processedProperties.getLoadBalance(),
-            processedProperties.getRefreshInterval(), processedProperties.getPlacements(),
-            processedProperties.isExplicitFallbackOnly(),
-            processedProperties.getFailedHostReconnectDelaySecs());
+        lb = new TopologyAwareLoadBalancer(processedProperties);
       }
       // 2. create control connection and fetch yb_servers() -- refer to LBProperties
       // .checkAndRefresh()
@@ -399,7 +390,7 @@ public class LoadBalanceService {
   public static Connection getConnection(LoadBalanceProperties.LoadBalancerKey key,
       ArrayList<String> timedOutHosts) {
     // Cleanup extra properties used for load balancing?
-    if (LoadBalanceProperties.getLoadBalanceValue(key.getProperties().getProperty(LoadBalanceProperties.LOAD_BALANCE_PROPERTY_KEY)) != LoadBalanceType.FALSE) {
+    if (LoadBalanceProperties.isLoadBalanceEnabled(key)) {
       Connection conn = getConnection(key, (Properties) key.getProperties().clone(), timedOutHosts);
       if (conn != null) {
         return conn;

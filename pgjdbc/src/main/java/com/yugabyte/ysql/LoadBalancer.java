@@ -15,7 +15,7 @@ import java.util.Map;
 public interface LoadBalancer {
 
   /**
-   * @param e The {@link LoadBalanceService.NodeInfo} object for the host
+   * @param e            The {@link LoadBalanceService.NodeInfo} object for the host
    * @param requestFlags The attributes for the load balancer to make use of
    * @return true, if a host is eligible to be considered for a connection request
    */
@@ -27,7 +27,8 @@ public interface LoadBalancer {
    * @param timedOutHosts list of host names where connections were attempted but timed out
    * @return the name of a host with the least number of connections, as per the driver's stats
    */
-  String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts);
+  String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
+      ArrayList<String> timedOutHosts);
 
   /**
    * @return the value of the property "yb-servers-refresh-interval" specified either in the url or
@@ -36,7 +37,7 @@ public interface LoadBalancer {
   int getRefreshListSeconds();
 
   /**
-   * @param uuid  universe_uuid of the cluster
+   * @param uuid universe_uuid of the cluster
    */
   void setUuid(String uuid);
 
@@ -46,7 +47,7 @@ public interface LoadBalancer {
   String getUuid();
 
   /**
-   * @return the last time the cluster was refreshed
+   * @return the last time the cluster info was refreshed
    */
   long getLastRefreshTime();
 

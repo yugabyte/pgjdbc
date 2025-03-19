@@ -37,7 +37,8 @@ public class LoadBalanceProperties {
    * response, it marks the server as UP only if the time specified via this property has elapsed
    * since the time it was last marked as a failed host.
    */
-  public static final String FAILED_HOST_RECONNECT_DELAY_SECS_KEY = "failed-host-reconnect-delay-secs";
+  public static final String FAILED_HOST_RECONNECT_DELAY_SECS_KEY = "failed-host-reconnect-delay"
+      + "-secs";
   /**
    * The default value should ideally match the interval at which the server-list is updated at
    * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
@@ -53,7 +54,8 @@ public class LoadBalanceProperties {
   public static final int MAX_REFRESH_INTERVAL = 600;
   public static final int MAX_FAILED_HOST_RECONNECT_DELAY_SECS = 60;
 
-  private static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceProperties.class.getName());
+  private static final Logger LOGGER =
+      Logger.getLogger("org.postgresql." + LoadBalanceProperties.class.getName());
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
    load-balance 'simple' to be used as KEY and for targeted topologies,
     <placements> value specified will be used as key
@@ -62,17 +64,10 @@ public class LoadBalanceProperties {
       new HashMap<>();
   private static final Map<LoadBalancerKey, LoadBalanceProperties> loadBalancePropertiesMap =
       new ConcurrentHashMap<>();
-  private static final Map<LoadBalancerKey, LoadBalancer> loadBalancerKeyToLoadBalancerMap =
-      new HashMap<>();
   private final String originalUrl;
   private final Properties originalProperties;
   private LoadBalanceService.LoadBalanceType loadBalance = LoadBalanceService.LoadBalanceType.FALSE;
   private String placements = null;
-  private int refreshInterval = -1;
-  private boolean explicitFallbackOnly;
-  private boolean refreshIntervalSpecified;
-  private int failedHostReconnectDelaySecs = -1;
-  private boolean failedHostReconnectDelaySpecified;
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -155,7 +150,7 @@ public class LoadBalanceProperties {
           if (lbParts.length != 2) {
             LOGGER.log(Level.WARNING,
                 "No valid value provided for " + FAILED_HOST_RECONNECT_DELAY_SECS_KEY + ". " +
-                "Ignoring it.");
+                    "Ignoring it.");
             continue;
           }
           processedProperties.setFailedHostReconnectDelaySecs(parseAndGetValue(lbParts[1],
@@ -236,7 +231,8 @@ public class LoadBalanceProperties {
       }
       return value;
     } catch (NumberFormatException nfe) {
-      LOGGER.warning("Provided value (" + propValue + ") is invalid, using the default value instead");
+      LOGGER.warning("Provided value (" + propValue + ") is invalid, using the default value "
+          + "instead");
       return defaultValue;
     }
   }
@@ -249,60 +245,15 @@ public class LoadBalanceProperties {
     return originalProperties;
   }
 
-  public boolean isLoadBalanceEnabled() {
-    return this.loadBalance != LoadBalanceService.LoadBalanceType.FALSE;
+  public static boolean isLoadBalanceEnabled(LoadBalancerKey key) {
+    if (getLoadBalanceValue(key.getProperties().getProperty(LOAD_BALANCE_PROPERTY_KEY)) != LoadBalanceService.LoadBalanceType.FALSE) {
+      return true;
+    }
+    return false;
   }
 
   public String getPlacements() {
     return placements;
-  }
-  
-  public LoadBalancer getAppropriateLoadBalancer() {
-    if (!isLoadBalanceEnabled()) {
-      throw new IllegalStateException(
-          "This method is expected to be called only when load-balance is true");
-    }
-    // todo Find a better way to pass/update these properties. Currently, lb instance is
-    //  singleton for a given placement, so cannot include these in it.
-    if (refreshIntervalSpecified) {
-      System.setProperty(REFRESH_INTERVAL_KEY, String.valueOf(refreshInterval));
-    }
-    if (failedHostReconnectDelaySpecified) {
-      System.setProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, String.valueOf(failedHostReconnectDelaySecs));
-    }
-    LoadBalancer ld = null;
-    if (placements == null) {
-      // return base class conn manager.
-      ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
-      if (ld == null) {
-        LOGGER.fine("No LB found for " + this.loadBalance + ", creating one ...");
-        synchronized (CONNECTION_MANAGER_MAP) {
-          ld = CONNECTION_MANAGER_MAP.get(this.loadBalance.name());
-          if (ld == null) {
-            ld = new ClusterAwareLoadBalancer(this.loadBalance, refreshInterval, explicitFallbackOnly, failedHostReconnectDelaySecs);
-            CONNECTION_MANAGER_MAP.put(this.loadBalance.name(), ld);
-          }
-        }
-      } else {
-        LOGGER.fine("LB found for " + this.loadBalance + ": " + ld);
-      }
-    } else {
-      String key = this.loadBalance.name() + "&" + placements + "&" +  String.valueOf(explicitFallbackOnly).toLowerCase(Locale.ROOT);
-      ld = CONNECTION_MANAGER_MAP.get(key);
-      if (ld == null) {
-        LOGGER.fine("No LB found for " + this.loadBalance + " and placements " + placements + " and fallback? " + explicitFallbackOnly + ", creating one ...");
-        synchronized (CONNECTION_MANAGER_MAP) {
-          ld = CONNECTION_MANAGER_MAP.get(key);
-          if (ld == null) {
-            ld = new TopologyAwareLoadBalancer(loadBalance, refreshInterval, placements, explicitFallbackOnly, failedHostReconnectDelaySecs);
-            CONNECTION_MANAGER_MAP.put(key, ld);
-          }
-        }
-      } else {
-        LOGGER.fine("LB found for " + this.loadBalance + " and placements " + placements + ": " + ld);
-      }
-    }
-    return ld;
   }
 
   public static class LoadBalancerKey {
@@ -339,7 +290,7 @@ public class LoadBalanceProperties {
     }
   }
 
-  public static class ProcessedProperties{
+  public static class ProcessedProperties {
     private String placements;
     private int refreshInterval;
     private boolean explicitFallbackOnly;
