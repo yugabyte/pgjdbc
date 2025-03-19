@@ -252,10 +252,6 @@ public class LoadBalanceProperties {
     return false;
   }
 
-  public String getPlacements() {
-    return placements;
-  }
-
   public static class LoadBalancerKey {
     private String url;
     private Properties properties;
