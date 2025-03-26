@@ -37,8 +37,7 @@ public class LoadBalanceProperties {
    * response, it marks the server as UP only if the time specified via this property has elapsed
    * since the time it was last marked as a failed host.
    */
-  public static final String FAILED_HOST_RECONNECT_DELAY_SECS_KEY = "failed-host-reconnect-delay"
-      + "-secs";
+  public static final String FAILED_HOST_RECONNECT_DELAY_SECS_KEY = "failed-host-reconnect-delay-secs";
   /**
    * The default value should ideally match the interval at which the server-list is updated at
    * cluster side for yb_servers() function. Here, kept it 5 seconds which is not too high (30s) and
@@ -66,8 +65,6 @@ public class LoadBalanceProperties {
       new ConcurrentHashMap<>();
   private final String originalUrl;
   private final Properties originalProperties;
-  private LoadBalanceService.LoadBalanceType loadBalance = LoadBalanceService.LoadBalanceType.FALSE;
-  private String placements = null;
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -100,71 +97,6 @@ public class LoadBalanceProperties {
 
   public static ProcessedProperties processURLAndProperties(String url, Properties properties) {
     ProcessedProperties processedProperties = new ProcessedProperties();
-    String[] urlParts = url.split("\\?");
-    StringBuilder sb = new StringBuilder(urlParts[0]);
-    if (urlParts.length == 2) {
-      urlParts = urlParts[1].split(PROPERTY_SEP);
-      String loadBalancerKey = LOAD_BALANCE_PROPERTY_KEY + EQUALS;
-      String topologyKey = TOPOLOGY_AWARE_PROPERTY_KEY + EQUALS;
-      String refreshIntervalKey = REFRESH_INTERVAL_KEY + EQUALS;
-      String explicitFallbackOnlyKey = EXPLICIT_FALLBACK_ONLY_KEY + EQUALS;
-      String failedHostReconnectDelayKey = FAILED_HOST_RECONNECT_DELAY_SECS_KEY + EQUALS;
-      for (String part : urlParts) {
-        if (part.startsWith(loadBalancerKey)) {
-          String[] lbParts = part.split(EQUALS);
-          if (lbParts.length < 2) {
-            LOGGER.log(Level.WARNING, "No value provided for load balance property. Ignoring it.");
-            continue;
-          }
-          String propValue = lbParts[1];
-          processedProperties.setLoadBalance(getLoadBalanceValue(propValue));
-        } else if (part.startsWith(topologyKey)) {
-          String[] lbParts = part.split(EQUALS);
-          if (lbParts.length != 2) {
-            LOGGER.log(Level.WARNING, "No valid value provided for topology keys. Ignoring it.");
-            continue;
-          }
-          processedProperties.setPlacements(lbParts[1]);
-        } else if (part.startsWith(refreshIntervalKey)) {
-          String[] lbParts = part.split(EQUALS);
-          if (lbParts.length != 2) {
-            LOGGER.log(Level.WARNING, "No valid value provided for " + REFRESH_INTERVAL_KEY + ". " +
-                "Ignoring it.");
-            continue;
-          }
-          processedProperties.setRefreshInterval(parseAndGetValue(lbParts[1],
-              DEFAULT_REFRESH_INTERVAL, MAX_REFRESH_INTERVAL));
-        } else if (part.startsWith(explicitFallbackOnlyKey)) {
-          String[] lbParts = part.split(EQUALS);
-          if (lbParts.length != 2) {
-            continue;
-          }
-          String propValue = lbParts[1];
-          if (propValue.equalsIgnoreCase("true")) {
-            processedProperties.setExplicitFallbackOnly(true);
-          } else {
-            processedProperties.setExplicitFallbackOnly(false);
-          }
-        } else if (part.startsWith(failedHostReconnectDelayKey)) {
-          String[] lbParts = part.split(EQUALS);
-          if (lbParts.length != 2) {
-            LOGGER.log(Level.WARNING,
-                "No valid value provided for " + FAILED_HOST_RECONNECT_DELAY_SECS_KEY + ". " +
-                    "Ignoring it.");
-            continue;
-          }
-          processedProperties.setFailedHostReconnectDelaySecs(parseAndGetValue(lbParts[1],
-              DEFAULT_FAILED_HOST_TTL_SECONDS, MAX_FAILED_HOST_RECONNECT_DELAY_SECS));
-        } else {
-          if (sb.toString().contains("?")) {
-            sb.append(PROPERTY_SEP);
-          } else {
-            sb.append("?");
-          }
-          sb.append(part);
-        }
-      }
-    }
     // Check properties bag also
     if (properties != null) {
       if (properties.containsKey(LOAD_BALANCE_PROPERTY_KEY)) {
@@ -193,11 +125,6 @@ public class LoadBalanceProperties {
       }
     }
     return processedProperties;
-  }
-
-  private void setLoadBalanceValue(String value) {
-    this.loadBalance = getLoadBalanceValue(value);
-    LOGGER.fine("loadbalance value set to " + this.loadBalance);
   }
 
   public static LoadBalanceService.LoadBalanceType getLoadBalanceValue(String value) {
@@ -246,10 +173,7 @@ public class LoadBalanceProperties {
   }
 
   public static boolean isLoadBalanceEnabled(LoadBalancerKey key) {
-    if (getLoadBalanceValue(key.getProperties().getProperty(LOAD_BALANCE_PROPERTY_KEY)) != LoadBalanceService.LoadBalanceType.FALSE) {
-      return true;
-    }
-    return false;
+    return (getLoadBalanceValue(key.getProperties().getProperty(LOAD_BALANCE_PROPERTY_KEY)) != LoadBalanceService.LoadBalanceType.FALSE);
   }
 
   public static class LoadBalancerKey {
