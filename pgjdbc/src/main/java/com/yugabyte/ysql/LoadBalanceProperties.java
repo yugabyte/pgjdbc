@@ -128,6 +128,9 @@ public class LoadBalanceProperties {
   }
 
   public static LoadBalanceService.LoadBalanceType getLoadBalanceValue(String value) {
+    if (value == null) {
+      return LoadBalanceService.LoadBalanceType.FALSE;
+    }
     switch (value.toLowerCase(Locale.ROOT)) {
     case "true":
     case "any":
