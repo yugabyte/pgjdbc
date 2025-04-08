@@ -47,6 +47,7 @@ public class LoadBalanceService {
   static synchronized void clear() throws SQLException {
     LOGGER.warning("Clearing LoadBalanceService state for testing purposes");
     uuidToClusterInfoMap.clear();
+    lbKeyToUuidMap.clear();
     for (Map.Entry<String, ClusterInfo> c : uuidToClusterInfoMap.entrySet()) {
       if (c.getValue().controlConnection != null) {
         c.getValue().controlConnection.close();
@@ -510,7 +511,7 @@ public class LoadBalanceService {
           if (hosts.isEmpty()) {
             LOGGER.fine("Failed to establish control connection to available servers");
             return null;
-          } else if (refreshFailed) {
+          } else if (!refreshFailed) {
             // Try the first host in the list (don't have to check least loaded one since it's
             // just for the control connection)
             HostSpec hs = new HostSpec(hosts.get(0), getPort(uuid, hosts.get(0)),
