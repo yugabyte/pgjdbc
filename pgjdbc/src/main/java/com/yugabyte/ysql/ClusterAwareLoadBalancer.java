@@ -22,8 +22,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 public class ClusterAwareLoadBalancer implements LoadBalancer {
-  protected static final Logger LOGGER =
-      Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
   private List<String> attempted = new ArrayList<>();
   private final LoadBalanceService.LoadBalanceType loadBalance;
   private byte requestFlags;
@@ -83,8 +82,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       Byte requestFlags) {
     // e.getKey() is the hostname
     return !attempted.contains(e.getKey()) && !e.getValue().isDown()
-        && LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(),
-        requestFlags);
+        && LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
   }
 
   public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,

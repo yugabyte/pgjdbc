@@ -142,20 +142,16 @@ public class LoadBalanceService {
         try {
           nodeInfo.port = Integer.valueOf(port);
         } catch (NumberFormatException nfe) {
-          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 "
-              + "instead.");
+          LOGGER.warning("Could not parse port " + port + " for host " + host + ", using 5433 instead.");
           nodeInfo.port = 5433;
         }
-        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY,
-            DEFAULT_FAILED_HOST_TTL_SECONDS);
+        long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay"
-                + "-secs (" + failedHostTTL + "s) has elapsed");
+            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has elapsed");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay"
-                + "-secs (" + failedHostTTL + "s) has not elapsed");
+            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
           }
         }
       }
@@ -187,7 +183,7 @@ public class LoadBalanceService {
         }
       }
     }
-    
+
     if (lb.getUuid() == null) {
       if (uuidToClusterInfoMap.containsKey(uuid)) {
         conn.close();
@@ -490,8 +486,7 @@ public class LoadBalanceService {
         } catch (SQLException ex) {
           if (refreshFailed) {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
-            String failed =
-                ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
+            String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(uuid, failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";

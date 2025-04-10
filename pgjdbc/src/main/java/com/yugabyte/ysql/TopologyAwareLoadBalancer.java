@@ -32,8 +32,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 public class TopologyAwareLoadBalancer implements LoadBalancer {
-  protected static final Logger LOGGER =
-      Logger.getLogger("org.postgresql." + TopologyAwareLoadBalancer.class.getName());
+  protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + TopologyAwareLoadBalancer.class.getName());
   /**
    * Holds the value of topology-keys specified.
    */
@@ -45,8 +44,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   /**
    * Derived from the placements value above.
    */
-  private final Map<Integer, Set<LoadBalanceService.CloudPlacement>> allowedPlacements =
-      new HashMap<>();
+  private final Map<Integer, Set<LoadBalanceService.CloudPlacement>> allowedPlacements = new HashMap<>();
   private final int PRIMARY_PLACEMENTS_INDEX = 1;
   private final int REST_OF_CLUSTER_INDEX = -1;
   /**
@@ -122,8 +120,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       } else {
         int pref = Integer.parseInt(v[1]);
         if (pref > 0 && pref <= MAX_PREFERENCE_VALUE) {
-          Set<LoadBalanceService.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref,
-              k -> new HashSet<>());
+          Set<LoadBalanceService.CloudPlacement> cpSet = allowedPlacements.computeIfAbsent(pref, k -> new HashSet<>());
           populatePlacementSet(v[0], cpSet);
         } else {
           throw new IllegalArgumentException("Invalid preference value for property " + TOPOLOGY_AWARE_PROPERTY_KEY + ": " + value);
@@ -165,12 +162,10 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX
         && (!explicitFallbackOnly || loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR))
         || (set != null && e.getValue().getPlacement().isContainedIn(set));
-    boolean isRightNode = LoadBalanceService.isRightNodeType(loadBalance,
-        e.getValue().getNodeType(), requestFlags);
+    boolean isRightNode = LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
     boolean isAttempted = attempted.contains(e.getKey());
     boolean isDown = e.getValue().isDown();
-    LOGGER.fine(e.getKey() + " has currentPlacementIndex " + currentPlacementIndex + ", required "
-        + "placement? "
+    LOGGER.fine(e.getKey() + " has currentPlacementIndex " + currentPlacementIndex + ", required placement? "
         + found + ", isDown? " + isDown + ", attempted? " + isAttempted + ", isRightNodeType? " + isRightNode);
     return found
         && !isAttempted
@@ -178,8 +173,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         && isRightNode;
   }
 
-  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
-      ArrayList<String> timedOutHosts) {
+  public synchronized String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts) {
     LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts);
     // Reset currentPlacementIndex if it's a new request AND refresh() happened after the
     // last request was processed
@@ -237,8 +231,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
           }
         }
         if (currentPlacementIndex == 0) {
-          // No host found in entire cluster. Relax the STRICT_PREFERENCE if load-balance is
-          // prefer-*
+          // No host found in entire cluster. Relax the STRICT_PREFERENCE if load-balance is prefer-*
           if (requestFlags == LoadBalanceService.STRICT_PREFERENCE &&
               (loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR)) {
             LOGGER.fine("Even rest of cluster did not have a host for us." +

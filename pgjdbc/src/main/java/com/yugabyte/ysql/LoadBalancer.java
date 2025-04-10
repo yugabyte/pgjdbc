@@ -27,8 +27,7 @@ public interface LoadBalancer {
    * @param timedOutHosts list of host names where connections were attempted but timed out
    * @return the name of a host with the least number of connections, as per the driver's stats
    */
-  String getLeastLoadedServer(boolean newRequest, List<String> failedHosts,
-      ArrayList<String> timedOutHosts);
+  String getLeastLoadedServer(boolean newRequest, List<String> failedHosts, ArrayList<String> timedOutHosts);
 
   /**
    * @return the value of the property "yb-servers-refresh-interval" specified either in the url or

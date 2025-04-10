@@ -53,8 +53,7 @@ public class LoadBalanceProperties {
   public static final int MAX_REFRESH_INTERVAL = 600;
   public static final int MAX_FAILED_HOST_RECONNECT_DELAY_SECS = 60;
 
-  private static final Logger LOGGER =
-      Logger.getLogger("org.postgresql." + LoadBalanceProperties.class.getName());
+  private static final Logger LOGGER = Logger.getLogger("org.postgresql." + LoadBalanceProperties.class.getName());
   /* Topology/Cluster aware key to load balancer mapping. For uniform policy
    load-balance 'simple' to be used as KEY and for targeted topologies,
     <placements> value specified will be used as key
@@ -157,8 +156,7 @@ public class LoadBalanceProperties {
       }
       return value;
     } catch (NumberFormatException nfe) {
-      LOGGER.warning("Provided value (" + propValue + ") is invalid, using the default value "
-          + "instead");
+      LOGGER.warning("Provided value (" + propValue + ") is invalid, using the default value instead");
       return defaultValue;
     }
   }
