@@ -37,6 +37,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
    * Holds the value of topology-keys specified.
    */
   private final String placements;
+  private String uuid;
   private final LoadBalanceService.LoadBalanceType loadBalance;
 
   private long lastRequestTime;
@@ -55,16 +56,32 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
   private final int refreshIntervalSeconds;
   private boolean explicitFallbackOnly = false;
   private byte requestFlags;
+  private int failedHostReconnectDelaySecs;
 
-  public TopologyAwareLoadBalancer(LoadBalanceType lb, String placementValues, boolean onlyExplicitFallback) {
+  public long getLastRefreshTime() {
+    return lastRefreshTime;
+  }
+
+  public void setLastRefreshTime(long lastRefreshTime) {
+    this.lastRefreshTime = lastRefreshTime;
+  }
+
+  private long lastRefreshTime;
+
+  public TopologyAwareLoadBalancer(LoadBalanceProperties.ProcessedProperties processedProperties) {
+    LoadBalanceType lb = processedProperties.getLoadBalance();
     if (lb != null) {
       loadBalance = lb;
     } else {
       loadBalance = LoadBalanceType.FALSE;
     }
-    placements = placementValues;
-    explicitFallbackOnly = onlyExplicitFallback;
-    refreshIntervalSeconds = Integer.getInteger(REFRESH_INTERVAL_KEY, DEFAULT_REFRESH_INTERVAL);
+    placements = processedProperties.getPlacements();
+    explicitFallbackOnly = processedProperties.isExplicitFallbackOnly();
+    int refreshInterval = processedProperties.getRefreshInterval();
+    refreshIntervalSeconds =
+        refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
+            refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+    this.failedHostReconnectDelaySecs = processedProperties.getFailedHostReconnectDelaySecs();
     parseGeoLocations();
   }
 
@@ -118,13 +135,23 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     return Integer.getInteger(REFRESH_INTERVAL_KEY, refreshIntervalSeconds);
   }
 
+  @Override
+  public void setUuid(String uuid) {
+    this.uuid = uuid;
+  }
+
+  @Override
+  public String getUuid() {
+    return this.uuid;
+  }
+
   public boolean isExplicitFallbackOnly() {
     return explicitFallbackOnly;
   }
 
   @Override
   public boolean isHostEligible(Map.Entry<String, LoadBalanceService.NodeInfo> e,
-          Byte requestFlags) {
+      Byte requestFlags) {
     Set<LoadBalanceService.CloudPlacement> set = allowedPlacements.get(currentPlacementIndex);
     // found is true when:
     // we are searching for nodes in entire cluster AND fallback-to-topology-keys-only is false
@@ -133,8 +160,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     // OR
     // allowed placements contain the node's placement
     boolean found = (currentPlacementIndex == REST_OF_CLUSTER_INDEX
-      && (!explicitFallbackOnly || loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR))
-      || (set != null && e.getValue().getPlacement().isContainedIn(set));
+        && (!explicitFallbackOnly || loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR))
+        || (set != null && e.getValue().getPlacement().isContainedIn(set));
     boolean isRightNode = LoadBalanceService.isRightNodeType(loadBalance, e.getValue().getNodeType(), requestFlags);
     boolean isAttempted = attempted.contains(e.getKey());
     boolean isDown = e.getValue().isDown();
@@ -150,7 +177,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts);
     // Reset currentPlacementIndex if it's a new request AND refresh() happened after the
     // last request was processed
-    if (newRequest && (LoadBalanceService.getLastRefreshTime() - lastRequestTime >= 0)) {
+    if (newRequest && (LoadBalanceService.getLastRefreshTime(this) - lastRequestTime >= 0)) {
       currentPlacementIndex = PRIMARY_PLACEMENTS_INDEX;
     } else {
       LOGGER.fine("Placements: [" + placements
@@ -165,7 +192,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
       if (timedOutHosts != null) {
         attempted.addAll(timedOutHosts);
       }
-      hosts = LoadBalanceService.getAllEligibleHosts(this, requestFlags);
+      hosts = LoadBalanceService.getAllEligibleHosts(getUuid(), this, requestFlags);
 
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
@@ -174,7 +201,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
           LOGGER.fine("Skipping failed host " + h);
           continue;
         }
-        int currLoad = LoadBalanceService.getLoad(h);
+        int currLoad = LoadBalanceService.getLoad(getUuid(), h);
         LOGGER.fine("Number of connections to " + h + ": " + currLoad);
         if (currLoad < min) {
           min = currLoad;
@@ -190,7 +217,7 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         chosenHost = minConnectionsHostList.get(idx);
       }
       if (chosenHost != null) {
-        LoadBalanceService.incrementConnectionCount(chosenHost);
+        LoadBalanceService.incrementConnectionCount(getUuid(), chosenHost);
       } else {
         LOGGER.fine("chosenHost is null for placement level " + currentPlacementIndex
             + ", allowedPlacements: " + allowedPlacements);
@@ -206,9 +233,9 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         if (currentPlacementIndex == 0) {
           // No host found in entire cluster. Relax the STRICT_PREFERENCE if load-balance is prefer-*
           if (requestFlags == LoadBalanceService.STRICT_PREFERENCE &&
-            (loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR)) {
+              (loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR)) {
             LOGGER.fine("Even rest of cluster did not have a host for us." +
-              " So relax the node type condition for prefer-* and try again once");
+                " So relax the node type condition for prefer-* and try again once");
             currentPlacementIndex = REST_OF_CLUSTER_INDEX;
             requestFlags = (byte) 0;
           } else {
@@ -224,11 +251,11 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     // load-balance=any AND fallback-to-topology-keys-only is true
     if (chosenHost == null &&
         (loadBalance == LoadBalanceType.ONLY_PRIMARY || loadBalance == LoadBalanceType.ONLY_RR ||
-        (loadBalance == LoadBalanceType.ANY && explicitFallbackOnly))) {
+            (loadBalance == LoadBalanceType.ANY && explicitFallbackOnly))) {
       throw new IllegalStateException("No node available in the given placements for the " +
-        (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" :
-        (loadBalance == LoadBalanceType.ONLY_RR ? "read-replica" : "entire")) +
-        " cluster to connect to.");
+          (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" :
+              (loadBalance == LoadBalanceType.ONLY_RR ? "read-replica" : "entire")) +
+          " cluster to connect to.");
     }
     return chosenHost;
   }

@@ -23,48 +23,58 @@ import java.util.logging.Logger;
 
 public class ClusterAwareLoadBalancer implements LoadBalancer {
   protected static final Logger LOGGER = Logger.getLogger("org.postgresql." + ClusterAwareLoadBalancer.class.getName());
-
-  private static volatile ClusterAwareLoadBalancer instance;
   private List<String> attempted = new ArrayList<>();
   private final LoadBalanceService.LoadBalanceType loadBalance;
   private byte requestFlags;
+  private String uuid;
+  private boolean explicitFallbackOnly;
+  private int failedHostReconnectDelaySecs;
+
+  public long getLastRefreshTime() {
+    return lastRefreshTime;
+  }
+
+  public void setLastRefreshTime(long lastRefreshTime) {
+    this.lastRefreshTime = lastRefreshTime;
+  }
+
+  private long lastRefreshTime;
 
   @Override
   public int getRefreshListSeconds() {
     return refreshListSeconds;
   }
 
+  @Override
+  public void setUuid(String uuid) {
+    this.uuid = uuid;
+  }
+
+  @Override
+  public String getUuid() {
+    return uuid;
+  }
+
   protected int refreshListSeconds = LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 
-  public ClusterAwareLoadBalancer(LoadBalanceService.LoadBalanceType lb, int refreshInterval) {
+  public ClusterAwareLoadBalancer(LoadBalanceProperties.ProcessedProperties processedProperties) {
+    LoadBalanceType lb = processedProperties.getLoadBalance();
     if (lb != null) {
       this.loadBalance = lb;
     } else {
       this.loadBalance = LoadBalanceType.FALSE;
     }
-    this.refreshListSeconds = refreshInterval;
-  }
-
-  public static ClusterAwareLoadBalancer getInstance(LoadBalanceService.LoadBalanceType lb,
-      int refreshListSeconds) {
-    if (instance == null) {
-      synchronized (ClusterAwareLoadBalancer.class) {
-        if (instance == null) {
-          instance = new ClusterAwareLoadBalancer(lb, refreshListSeconds);
-          instance.refreshListSeconds =
-              refreshListSeconds >= 0 && refreshListSeconds <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
-                  refreshListSeconds : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
-          LOGGER.fine("Created a new cluster-aware LB instance with loadbalance = " +
-              instance.loadBalance + " and refresh interval " + instance.refreshListSeconds + " seconds");
-        }
-      }
-    }
-    return instance;
+    int refreshInterval = processedProperties.getRefreshInterval();
+    this.refreshListSeconds =
+        refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
+            refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+    this.explicitFallbackOnly = processedProperties.isExplicitFallbackOnly();
+    this.failedHostReconnectDelaySecs = processedProperties.getFailedHostReconnectDelaySecs();
   }
 
   public String toString() {
     return this.getClass().getSimpleName() + ": loadBalance = " +
-      loadBalance + ", refreshInterval = " + refreshListSeconds;
+        loadBalance + ", refreshInterval = " + refreshListSeconds;
   }
 
   @Override
@@ -87,7 +97,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     String chosenHost = null;
 
     while (true) {
-      ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(this, requestFlags);
+      ArrayList<String> hosts = LoadBalanceService.getAllEligibleHosts(uuid, this, requestFlags);
       int min = Integer.MAX_VALUE;
       ArrayList<String> minConnectionsHostList = new ArrayList<>();
       for (String h : hosts) {
@@ -96,7 +106,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
           LOGGER.fine("Skipping failed host " + h + "(was timed out host=" + wasTimedOutHost + ")");
           continue;
         }
-        int currLoad = LoadBalanceService.getLoad(h);
+        int currLoad = LoadBalanceService.getLoad(uuid, h);
         LOGGER.fine("Number of connections to " + h + ": " + currLoad);
         if (currLoad < min) {
           min = currLoad;
@@ -112,7 +122,7 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
         chosenHost = minConnectionsHostList.get(idx);
       }
       if (chosenHost != null) {
-        LoadBalanceService.incrementConnectionCount(chosenHost);
+        LoadBalanceService.incrementConnectionCount(uuid, chosenHost);
         break; // We got a host
       } else if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
         // Relax the STRICT_PREFERENCE condition and consider other node types
@@ -125,8 +135,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     if (chosenHost == null && (loadBalance == LoadBalanceType.ONLY_PRIMARY ||
         loadBalance == LoadBalanceType.ONLY_RR)) {
       throw new IllegalStateException("No node available in "
-        + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" : "read-replica")
-        + " cluster to connect to.");
+          + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" : "read-replica")
+          + " cluster to connect to.");
     }
     return chosenHost;
   }

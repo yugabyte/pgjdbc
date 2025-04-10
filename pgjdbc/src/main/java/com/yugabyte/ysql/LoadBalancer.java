@@ -15,7 +15,7 @@ import java.util.Map;
 public interface LoadBalancer {
 
   /**
-   * @param e The {@link LoadBalanceService.NodeInfo} object for the host
+   * @param e            The {@link LoadBalanceService.NodeInfo} object for the host
    * @param requestFlags The attributes for the load balancer to make use of
    * @return true, if a host is eligible to be considered for a connection request
    */
@@ -34,5 +34,25 @@ public interface LoadBalancer {
    * as a property
    */
   int getRefreshListSeconds();
+
+  /**
+   * @param uuid universe_uuid of the cluster
+   */
+  void setUuid(String uuid);
+
+  /**
+   * @return the universe_uuid of the cluster
+   */
+  String getUuid();
+
+  /**
+   * @return the last time the cluster info was refreshed
+   */
+  long getLastRefreshTime();
+
+  /**
+   * @param lastRefreshTime the last time the cluster was refreshed
+   */
+  void setLastRefreshTime(long lastRefreshTime);
 
 }
