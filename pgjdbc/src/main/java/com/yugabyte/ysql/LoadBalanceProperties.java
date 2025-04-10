@@ -113,11 +113,7 @@ public class LoadBalanceProperties {
       }
       if (properties.containsKey(EXPLICIT_FALLBACK_ONLY_KEY)) {
         String propValue = properties.getProperty(EXPLICIT_FALLBACK_ONLY_KEY);
-        if (propValue.equalsIgnoreCase("true")) {
-          processedProperties.setExplicitFallbackOnly(true);
-        } else {
-          processedProperties.setExplicitFallbackOnly(false);
-        }
+        processedProperties.setExplicitFallbackOnly(propValue.equalsIgnoreCase("true"));
       }
       if (properties.containsKey(FAILED_HOST_RECONNECT_DELAY_SECS_KEY)) {
         processedProperties.setFailedHostReconnectDelaySecs(parseAndGetValue(properties.getProperty(FAILED_HOST_RECONNECT_DELAY_SECS_KEY),
