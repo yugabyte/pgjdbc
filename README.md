@@ -180,9 +180,9 @@ String yburl = "jdbc:yugabytedb://127.0.0.1:5433/yugabyte?user=yugabyte&password
 
 The YugabyteDB JDBC Driver supports the use of logging (or tracing) to help resolve issues with the pgJDBC Driver when is used in your application.
 
-The smart Driver uses the logging APIs of java.util.logging that is part of Java since JDK 1.4, which makes it a good choice for the driver since it doesn’t add any external dependency for a logging framework. java.util.logging is a very rich and powerful tool.
+The smart driver uses the logging APIs of `java.util.logging` that is part of Java since JDK 1.4, Also, it's a good choice for the driver since it doesn’t add any external dependency for a logging framework. `java.util.logging` is a very rich and powerful tool.
 
-This logging support was added since version 42.7.3-yb-1 of the YugabyteDB pgJDBC Driver, and previous versions uses a custom mechanism to enable logging that it is replaced by the use of java.util.logging in current versions, the old mechanism is no longer available.
+This logging support was added since version 42.7.3-yb-1 of the YugabyteDB pgJDBC Driver.  The previous versions used a custom mechanism to enable logging but it is replaced by the use of `java.util.logging` in current versions. The old mechanism is no longer supported.
 
 ### Configuration 
 The Logging APIs offer both static and dynamic configuration control. Static control enables field service staff to set up a particular configuration and then re-launch the application with the new logging settings. Dynamic control allows for updates to the logging configuration within a currently running program.
