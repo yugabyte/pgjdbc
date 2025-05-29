@@ -185,14 +185,13 @@ The smart driver uses the logging APIs of `java.util.logging` that is part of Ja
 This logging support was added since version 42.7.3-yb-1 of the YugabyteDB pgJDBC Driver.  The previous versions used a custom mechanism to enable logging but it is replaced by the use of `java.util.logging` in current versions. The old mechanism is no longer supported.
 
 ### Configuration 
-The Logging APIs offer both static and dynamic configuration control. Static control enables field service staff to set up a particular configuration and then re-launch the application with the new logging settings. Dynamic control allows for updates to the logging configuration within a currently running program.
 
 The root logger used by the pgJDBC driver is `com.yugabyte`.
 
 Enable logging by using logging.properties file 
 The default Java logging framework stores its configuration in a file called logging.properties . Settings are stored per line using a dot notation format. Java installs a global configuration file in the lib folder of the Java installation directory, although you can use a separate configuration file by specifying the java.util.logging.config.file property when starting a Java program. logging.properties files can also be created and stored with individual projects.
 
-The following is an example of setting that you can make in the logging.properties :
+The following is an example of setting that you can make in the logging.properties to enable logs at FINEST level for 5 classes specified at the end and at INFO level for rest of them:
 
 ```
 # Specify the handler, the handlers will be installed during VM startup.
