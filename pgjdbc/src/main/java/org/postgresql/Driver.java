@@ -271,7 +271,7 @@ public class Driver implements java.sql.Driver {
     // get defaults
     Properties defaults;
 
-    if (!url.startsWith("jdbc:yugabytedb:")) {
+    if (!url.startsWith("jdbc:yugabytedb:") && !url.startsWith("jdbc:postgresql:")) {
       return null;
     }
     try {
@@ -599,11 +599,16 @@ public class Driver implements java.sql.Driver {
       urlArgs = url.substring(qPos + 1);
     }
 
-    if (!urlServer.startsWith("jdbc:yugabytedb:")) {
-      LOGGER.log(Level.FINE, "JDBC URL must start with \"jdbc:yugabytedb:\" but was: {0}", url);
+    String prefix;
+    if (urlServer.startsWith("jdbc:yugabytedb:")) {
+      prefix = "jdbc:yugabytedb:";
+    } else if (urlServer.startsWith("jdbc:postgresql:")) {
+      prefix = "jdbc:postgresql:";
+    } else {
+      LOGGER.log(Level.FINE, "JDBC URL must start with \"jdbc:yugabytedb:\" or \"jdbc:postgresql:\" but was: {0}", url);
       return null;
     }
-    urlServer = urlServer.substring("jdbc:yugabytedb:".length());
+    urlServer = urlServer.substring(prefix.length());
 
     if ("//".equals(urlServer) || "///".equals(urlServer)) {
       urlServer = "";
