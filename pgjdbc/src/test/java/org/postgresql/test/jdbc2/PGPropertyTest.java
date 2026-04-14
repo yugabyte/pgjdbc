@@ -171,7 +171,7 @@ class PGPropertyTest {
   void overWriteDSProperties() throws Exception {
     PGSimpleDataSource dataSource = new PGSimpleDataSource();
     dataSource.setAutosave(AutoSave.CONSERVATIVE);
-    dataSource.setURL("jdbc:postgresql://localhost:5432/postgres");
+    dataSource.setURL("jdbc:yugabytedb://localhost:5432/postgres");
     assertSame(AutoSave.CONSERVATIVE, dataSource.getAutosave());
   }
 
