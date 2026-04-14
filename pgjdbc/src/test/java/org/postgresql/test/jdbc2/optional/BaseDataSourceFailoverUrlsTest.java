@@ -25,27 +25,27 @@ class BaseDataSourceFailoverUrlsTest {
 
   @Test
   void fullDefault() throws ClassNotFoundException, NamingException, IOException {
-    roundTripFromUrl("jdbc:postgresql://server/database", "jdbc:postgresql://server:" + DEFAULT_PORT + "/database");
+    roundTripFromUrl("jdbc:yugabytedb://server/database", "jdbc:yugabytedb://server:" + DEFAULT_PORT + "/database");
   }
 
   @Test
   void twoNoPorts() throws ClassNotFoundException, NamingException, IOException {
-    roundTripFromUrl("jdbc:postgresql://server1,server2/database", "jdbc:postgresql://server1:" + DEFAULT_PORT + ",server2:" + DEFAULT_PORT + "/database");
+    roundTripFromUrl("jdbc:yugabytedb://server1,server2/database", "jdbc:yugabytedb://server1:" + DEFAULT_PORT + ",server2:" + DEFAULT_PORT + "/database");
   }
 
   @Test
   void twoWithPorts() throws ClassNotFoundException, NamingException, IOException {
-    roundTripFromUrl("jdbc:postgresql://server1:1234,server2:2345/database", "jdbc:postgresql://server1:1234,server2:2345/database");
+    roundTripFromUrl("jdbc:yugabytedb://server1:1234,server2:2345/database", "jdbc:yugabytedb://server1:1234,server2:2345/database");
   }
 
   @Test
   void twoFirstPort() throws ClassNotFoundException, NamingException, IOException {
-    roundTripFromUrl("jdbc:postgresql://server1,server2:2345/database", "jdbc:postgresql://server1:" + DEFAULT_PORT + ",server2:2345/database");
+    roundTripFromUrl("jdbc:yugabytedb://server1,server2:2345/database", "jdbc:yugabytedb://server1:" + DEFAULT_PORT + ",server2:2345/database");
   }
 
   @Test
   void twoLastPort() throws ClassNotFoundException, NamingException, IOException {
-    roundTripFromUrl("jdbc:postgresql://server1:2345,server2/database", "jdbc:postgresql://server1:2345,server2:" + DEFAULT_PORT + "/database");
+    roundTripFromUrl("jdbc:yugabytedb://server1:2345,server2/database", "jdbc:yugabytedb://server1:2345,server2:" + DEFAULT_PORT + "/database");
   }
 
   @Test
