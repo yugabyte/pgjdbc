@@ -21,7 +21,8 @@ import javax.naming.NamingException;
  */
 class BaseDataSourceFailoverUrlsTest {
 
-  private static final String DEFAULT_PORT = "5432";
+  /** Yugabyte fork default (see {@code org.postgresql.Driver}); upstream PostgreSQL uses 5432. */
+  private static final String DEFAULT_PORT = "5433";
 
   @Test
   void fullDefault() throws ClassNotFoundException, NamingException, IOException {
