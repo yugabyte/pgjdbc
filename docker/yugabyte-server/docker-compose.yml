@@ -1,0 +1,50 @@
+services:
+  yugabytedb:
+    image: yugabytedb/yugabyte:${YBV:-latest}
+    hostname: yugabytedb
+    ports:
+      - "${YB_YSQL_PORT:-5433}:5433"
+      - "7000:7000"
+      - "9000:9000"
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - ./scripts/:/custom/scripts:ro
+      - ../../certdir/server:/custom/certdir:ro
+    entrypoint:
+      - bash
+      - /custom/scripts/entrypoint.sh
+    environment:
+      - SSL=${SSL:-no}
+      - XA=${XA:-yes}
+      - SCRAM=${SCRAM:-yes}
+      - YB_ENABLE_YSQL_CONN_MGR=${YB_ENABLE_YSQL_CONN_MGR:-no}
+      - TZ=${TZ:-Etc/UTC}
+    healthcheck:
+      test: ["CMD", "/home/yugabyte/bin/ysqlsh", "-h", "yugabytedb", "-p", "5433", "-U", "yugabyte", "-c", "SELECT 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  test-runner:
+    image: eclipse-temurin:17-jdk
+    depends_on:
+      yugabytedb:
+        condition: service_healthy
+    volumes:
+      - ../../:/pgjdbc:rw
+      - gradle-cache:/root/.gradle
+    working_dir: /pgjdbc
+    entrypoint:
+      - bash
+      - /pgjdbc/docker/yugabyte-server/scripts/run-tests.sh
+    environment:
+      - SSL=${SSL:-no}
+      - SCRAM=${SCRAM:-yes}
+      - YB_ENABLE_YSQL_CONN_MGR=${YB_ENABLE_YSQL_CONN_MGR:-no}
+      - YB_HOST=yugabytedb
+      - YB_PORT=5433
+
+volumes:
+  gradle-cache:
