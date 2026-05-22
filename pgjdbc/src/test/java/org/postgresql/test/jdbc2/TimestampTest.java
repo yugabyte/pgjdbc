@@ -382,7 +382,11 @@ public class TimestampTest extends BaseTest4 {
     ResultSet rs;
     Timestamp t;
 
-    rs = stmt.executeQuery("select ts from " + TSWTZ_TABLE); // removed the order by ts
+    // YB: restore "order by ts" so result-set traversal is deterministic across
+    // CM-on (Odyssey) and CM-off runs. Without it, heap-scan order depends on
+    // which TServer/Odyssey backend serves the query, which produces spurious
+    // CM-specific failures and shifted line numbers between the two runs.
+    rs = stmt.executeQuery("select ts from " + TSWTZ_TABLE + " order by ts");
     assertNotNull(rs);
 
     for (int i = 0; i < 3; i++) {
@@ -463,7 +467,9 @@ public class TimestampTest extends BaseTest4 {
     Timestamp t;
     String tString;
 
-    ResultSet rs = stmt.executeQuery("select ts from " + TSWOTZ_TABLE); // removed the order by ts
+    // YB: see comment in timestampTestWTZ() above - restore deterministic
+    // ordering so CM-on vs CM-off runs walk rows in the same sequence.
+    ResultSet rs = stmt.executeQuery("select ts from " + TSWOTZ_TABLE + " order by ts");
     assertNotNull(rs);
 
     for (int i = 0; i < 3; i++) {
