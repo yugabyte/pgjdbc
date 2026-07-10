@@ -488,6 +488,8 @@ public class LoadBalanceService {
             LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
             String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(uuid, failed);
+            // Drop the host we just failed to refresh against so we don't retry it indefinitely.
+            hosts.remove(failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
             LOGGER.fine("Exception while creating control connection to "
@@ -496,6 +498,19 @@ public class LoadBalanceService {
               hosts.remove(h.getHost());
             }
           }
+          // Release the failed/dirty control connection before dropping the reference, otherwise
+          // the underlying socket and server-side session are leaked on every retry.
+          if (controlConnection != null) {
+            try {
+              controlConnection.close();
+            } catch (SQLException closeEx) {
+              LOGGER.fine("Error while closing failed control connection: " + closeEx);
+            }
+          }
+          if (uuid != null) {
+            uuidToClusterInfoMap.get(uuid).setControlConnection(null);
+          }
+          controlConnection = null;
           if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
             LOGGER.warning("Received UNDEFINED_FUNCTION for yb_servers()" +
                 " (SQLState=42883). You may be using an older version of" +
@@ -506,17 +521,14 @@ public class LoadBalanceService {
           if (hosts.isEmpty()) {
             LOGGER.fine("Failed to establish control connection to available servers");
             return null;
-          } else if (!refreshFailed) {
+          } else {
             // Try the first host in the list (don't have to check least loaded one since it's
-            // just for the control connection)
+            // just for the control connection). This also advances off a host whose refresh
+            // failed, so we don't keep hammering the same node.
             HostSpec hs = new HostSpec(hosts.get(0), getPort(uuid, hosts.get(0)),
                 key.getProperties().getProperty("localSocketAddress"));
             hspec = new HostSpec[]{hs};
           }
-          if (uuid != null) {
-            uuidToClusterInfoMap.get(uuid).setControlConnection(null);
-          }
-          controlConnection = null;
         }
       }
     }
