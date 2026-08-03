@@ -519,7 +519,7 @@ public class LoadBalanceService {
           }
           // Retry until servers are available
           if (hosts.isEmpty()) {
-            LOGGER.fine("Failed to establish control connection to available servers");
+            LOGGER.warning("Failed to establish control connection to available servers");
             return null;
           } else {
             // Try the first host in the list (don't have to check least loaded one since it's
