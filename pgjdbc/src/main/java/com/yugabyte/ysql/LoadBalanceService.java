@@ -22,9 +22,9 @@ public class LoadBalanceService {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   // Control connection only runs yb_servers(). Keep these bounded so a hung refresh
   // cannot stall synchronized checkAndRefresh() (and all new LB connections).
-  private static final int CONTROL_CONN_CONNECT_TIMEOUT_SECS = 5;
-  private static final int CONTROL_CONN_SOCKET_TIMEOUT_SECS = 10;
-  private static final int CONTROL_CONN_QUERY_TIMEOUT_SECS = 8;
+  private static final int CONTROL_CONN_CONNECT_TIMEOUT_SECS = 10;
+  private static final int CONTROL_CONN_SOCKET_TIMEOUT_SECS = 15;
+  private static final int CONTROL_CONN_QUERY_TIMEOUT_SECS = 10;
   protected static final Logger LOGGER =
       Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static boolean forceRefreshOnce = false;
@@ -501,6 +501,7 @@ public class LoadBalanceService {
       HostSpec[] hspec = hostSpecs(properties);
       Connection controlConnection = null;
       ArrayList<String> hosts = getAllAvailableHosts(lbKeyToUuidMap.get(key), new ArrayList<>());
+      boolean originalHostsTried = false;
       while (true) {
         boolean refreshFailed = false;
         try {
@@ -555,10 +556,13 @@ public class LoadBalanceService {
                 " YugabyteDB, consider upgrading it.");
             return null;
           }
-          // Retry until servers are available
-          if (hosts.isEmpty()) {
+          // Return if control connection failed and no servers are available
+          if ((!refreshFailed || originalHostsTried) && hosts.isEmpty()) {
             LOGGER.warning("Failed to establish control connection to available servers");
             return null;
+          } else if (refreshFailed && !originalHostsTried) {
+            LOGGER.warning("Refresh failed. Retrying with original hspec");
+            originalHostsTried = true;  // continue to try the original hspec once
           } else {
             // Try the first host in the list (don't have to check least loaded one since it's
             // just for the control connection). This also advances off a host whose refresh
