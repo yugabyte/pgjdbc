@@ -20,6 +20,11 @@ import java.util.logging.Logger;
 public class LoadBalanceService {
   static final byte STRICT_PREFERENCE = 0b00000001;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
+  // Control connection only runs yb_servers(). Keep these bounded so a hung refresh
+  // cannot stall synchronized checkAndRefresh() (and all new LB connections).
+  private static final int CONTROL_CONN_CONNECT_TIMEOUT_SECS = 5;
+  private static final int CONTROL_CONN_SOCKET_TIMEOUT_SECS = 10;
+  private static final int CONTROL_CONN_QUERY_TIMEOUT_SECS = 8;
   protected static final Logger LOGGER =
       Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static boolean forceRefreshOnce = false;
@@ -94,6 +99,7 @@ public class LoadBalanceService {
       LoadBalancer lb) throws SQLException {
     forceRefreshOnce = false;
     Statement st = conn.createStatement();
+    st.setQueryTimeout(CONTROL_CONN_QUERY_TIMEOUT_SECS);
     LOGGER.fine("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
@@ -156,7 +162,7 @@ public class LoadBalanceService {
             LOGGER.info("Marked " + nodeInfo.host + " as UP");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.info("Kept " + nodeInfo.host + " marked as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
+            LOGGER.fine("Kept " + nodeInfo.host + " marked as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
           }
         }
       }
@@ -168,14 +174,14 @@ public class LoadBalanceService {
       try {
         hostInetAddr = InetAddress.getByName(host);
       } catch (UnknownHostException e) {
-        LOGGER.fine("Failed to get host '" + host + "' by name");
+        LOGGER.fine("Failed to get inet address for host '" + host + "' by name");
         hostInetAddr = null;
       }
       try {
         publicHostInetAddr = !publicHost.isEmpty()
             ? InetAddress.getByName(publicHost) : null;
       } catch (UnknownHostException e) {
-        LOGGER.fine("Failed to get public_ip '" + publicHost + "' by name");
+        LOGGER.fine("Failed to get inet address for public_ip '" + publicHost + "' by name");
         publicHostInetAddr = null;
       }
       if (cluster.getUseHostColumn() == null) {
@@ -237,11 +243,12 @@ public class LoadBalanceService {
 
   private static void markAsFailed(String uuid, String host) {
     if (uuid == null) {
-      LOGGER.fine("Could not mark down host: " + host + ". UUID not present");
+      LOGGER.info("Could not mark host: " + host + " as DOWN. Cluster UUID not present");
       return;
     }
     NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     if (info == null) {
+      LOGGER.info("Could not mark host: " + host + " as DOWN. Host not found in cluster UUID: " + uuid);
       return; // unexpected
     }
     synchronized (info) {
@@ -488,7 +495,9 @@ public class LoadBalanceService {
     if (needsRefresh(lb.getRefreshListSeconds(), lb)) {
       String url = key.getUrl();
       Properties properties = new Properties(key.getProperties());
-      properties.setProperty("socketTimeout", "15");
+      // Do not inherit a disabled (0) or large app timeout for this metadata-only path.
+      properties.setProperty("connectTimeout", String.valueOf(CONTROL_CONN_CONNECT_TIMEOUT_SECS));
+      properties.setProperty("socketTimeout", String.valueOf(CONTROL_CONN_SOCKET_TIMEOUT_SECS));
       HostSpec[] hspec = hostSpecs(properties);
       Connection controlConnection = null;
       ArrayList<String> hosts = getAllAvailableHosts(lbKeyToUuidMap.get(key), new ArrayList<>());
@@ -514,14 +523,14 @@ public class LoadBalanceService {
           }
         } catch (SQLException ex) {
           if (refreshFailed) {
-            LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
+            LOGGER.warning("Exception while refreshing: " + ex + ", " + ex.getSQLState());
             String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(uuid, failed);
             // Drop the host we just failed to refresh against so we don't retry it indefinitely.
             hosts.remove(failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
-            LOGGER.fine("Exception while creating control connection to "
+            LOGGER.warning("Exception while creating control connection to "
                 + hspec[0].getHost() + msg + ": " + ex + ", " + ex.getSQLState());
             for (HostSpec h : hspec) {
               hosts.remove(h.getHost());
