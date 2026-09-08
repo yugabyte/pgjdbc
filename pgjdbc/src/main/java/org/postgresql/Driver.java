@@ -23,8 +23,6 @@ package org.postgresql;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
-import com.yugabyte.ysql.LoadBalancer;
-
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.jdbc.ResourceLock;
 import org.postgresql.jdbcurlresolver.PgPassParser;
@@ -325,7 +323,7 @@ public class Driver implements java.sql.Driver {
       ArrayList<String> prevTimedOutServers = new ArrayList<>();
       int maxRetries = 10;
       int tries = 0;
-      while(true) {
+      while (true) {
         ct = new ConnectThread(key, prevTimedOutServers);
         try {
           Thread thread = new Thread(ct, "PostgreSQL JDBC driver connection thread");
@@ -334,11 +332,12 @@ public class Driver implements java.sql.Driver {
           return ct.getResult(timeout);
         } catch (PSQLException ex1) {
           LOGGER.log(Level.INFO, "got exception state: " + ex1.getSQLState());
-          if (LoadBalanceProperties.isLoadBalanceEnabled(key) && !prevTimedOutServers.isEmpty() && tries++ < maxRetries &&
-              ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
+          if (LoadBalanceProperties.isLoadBalanceEnabled(key) && !prevTimedOutServers.isEmpty()
+              && tries++ < maxRetries
+              && ex1.getSQLState().equals(PSQLState.CONNECTION_UNABLE_TO_CONNECT.getState())) {
             LOGGER.log(Level.INFO, "Connection timeout error occurred with server: "
-                + prevTimedOutServers.get(prevTimedOutServers.size() - 1) +
-                " trying other servers, retryAttempt=" + tries);
+                + prevTimedOutServers.get(prevTimedOutServers.size() - 1)
+                + " trying other servers, retryAttempt=" + tries);
           } else {
             throw ex1;
           }
@@ -383,6 +382,7 @@ public class Driver implements java.sql.Driver {
     private final Condition lockCondition = lock.newCondition();
 
     private final ArrayList<String> triedHosts;
+
     ConnectThread(LoadBalanceProperties.LoadBalancerKey key, ArrayList<String> prevTimedOutServers) {
       this.key = key;
       triedHosts = prevTimedOutServers;
@@ -491,7 +491,9 @@ public class Driver implements java.sql.Driver {
     }
     // Make the timedOutHosts empty so that the connect thread does not retry because of failures from
     // the original connect attempt.
-    if (timedOutHosts != null) timedOutHosts.clear();
+    if (timedOutHosts != null) {
+      timedOutHosts.clear();
+    }
     return new PgConnection(hostSpecs(key.getProperties()), key.getProperties(), key.getUrl());
   }
 
