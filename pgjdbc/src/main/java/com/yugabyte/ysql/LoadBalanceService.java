@@ -20,9 +20,15 @@ import java.util.logging.Logger;
 public class LoadBalanceService {
   static final byte STRICT_PREFERENCE = 0b00000001;
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
+  // Control connection only runs yb_servers(). Keep these bounded so a hung refresh
+  // cannot stall synchronized checkAndRefresh() (and all new LB connections).
+  private static final int CONTROL_CONN_CONNECT_TIMEOUT_SECS = 10;
+  private static final int CONTROL_CONN_SOCKET_TIMEOUT_SECS = 15;
+  private static final int CONTROL_CONN_QUERY_TIMEOUT_SECS = 10;
   protected static final Logger LOGGER =
       Logger.getLogger("org.postgresql." + LoadBalanceService.class.getName());
   private static boolean forceRefreshOnce = false;
+  private static volatile boolean loggedNoUniverseUuid = false;
   public static Map<String, ClusterInfo> uuidToClusterInfoMap = new ConcurrentHashMap<>();
   public static Map<LoadBalanceProperties.LoadBalancerKey, String> lbKeyToUuidMap =
       new ConcurrentHashMap<>();
@@ -60,6 +66,7 @@ public class LoadBalanceService {
       }
     }
     forceRefreshOnce = false;
+    loggedNoUniverseUuid = false;
   }
 
   static long getLastRefreshTime(LoadBalancer lb) {
@@ -88,10 +95,11 @@ public class LoadBalanceService {
    * @return the value of the universe_uuid of the cluster
    * @throws SQLException
    */
-  private static synchronized String refresh(Connection conn, long refreshInterval,
+  static synchronized String refresh(Connection conn, long refreshInterval,
       LoadBalancer lb) throws SQLException {
     forceRefreshOnce = false;
     Statement st = conn.createStatement();
+    st.setQueryTimeout(CONTROL_CONN_QUERY_TIMEOUT_SECS);
     LOGGER.fine("Executing query: " + GET_SERVERS_QUERY + " to fetch list of servers");
     ResultSet rs = st.executeQuery(GET_SERVERS_QUERY);
     InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
@@ -99,9 +107,10 @@ public class LoadBalanceService {
     boolean publicIPsGivenForAll = true;
     String uuid = null;
     ClusterInfo cluster = null;
+    Set<String> hostsInLatestQuery = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     while (rs.next()) {
       String host = rs.getString("host");
-      LOGGER.finest("Received entry for host " + host);
+      hostsInLatestQuery.add(host);
       String publicHost = rs.getString("public_ip");
       publicHost = publicHost == null ? "" : publicHost;
       String port = rs.getString("port");
@@ -112,9 +121,12 @@ public class LoadBalanceService {
       try {
         uuid = rs.getString("universe_uuid");
       } catch (PSQLException e) {
-        LOGGER.info("Found a version of YugabyteDB which does not send universe_uuid in its "
-            + "response of yb_servers() function. Connecting to more than one such clusters is not "
-            + "supported.");
+        if (!loggedNoUniverseUuid) {
+          LOGGER.info("Found a version of YugabyteDB which does not send universe_uuid in its "
+              + "response of yb_servers() function. Connecting to more than one such clusters is not "
+              + "supported.");
+          loggedNoUniverseUuid = true;
+        }
         uuid = "default";
       }
 
@@ -137,7 +149,6 @@ public class LoadBalanceService {
         nodeInfo.publicIP = publicHost;
         publicIPsGivenForAll = !publicHost.isEmpty();
         nodeInfo.placement = new CloudPlacement(cloud, region, zone);
-        LOGGER.fine("Setting node_type to " + nodeType + " for host " + host);
         nodeInfo.nodeType = nodeType;
         try {
           nodeInfo.port = Integer.valueOf(port);
@@ -148,13 +159,14 @@ public class LoadBalanceService {
         long failedHostTTL = Long.getLong(FAILED_HOST_RECONNECT_DELAY_SECS_KEY, DEFAULT_FAILED_HOST_TTL_SECONDS);
         if (nodeInfo.isDown) {
           if (System.currentTimeMillis() - nodeInfo.isDownSince > (failedHostTTL * 1000)) {
-            LOGGER.fine("Marking " + nodeInfo.host + " as UP since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has elapsed");
+            LOGGER.info("Marked " + nodeInfo.host + " as UP");
             nodeInfo.isDown = false;
           } else {
-            LOGGER.fine("Keeping " + nodeInfo.host + " as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
+            LOGGER.fine("Kept " + nodeInfo.host + " marked as DOWN since failed-host-reconnect-delay-secs (" + failedHostTTL + "s) has not elapsed");
           }
         }
       }
+      LOGGER.finest("Adding " + nodeInfo);
       hostToNodeInfoMap.putIfAbsent(host, nodeInfo);
 
       InetAddress hostInetAddr;
@@ -162,14 +174,14 @@ public class LoadBalanceService {
       try {
         hostInetAddr = InetAddress.getByName(host);
       } catch (UnknownHostException e) {
-        LOGGER.fine("Failed to get host '" + host + "' by name");
+        LOGGER.fine("Failed to get inet address for host '" + host + "' by name");
         hostInetAddr = null;
       }
       try {
         publicHostInetAddr = !publicHost.isEmpty()
             ? InetAddress.getByName(publicHost) : null;
       } catch (UnknownHostException e) {
-        LOGGER.fine("Failed to get public_ip '" + publicHost + "' by name");
+        LOGGER.fine("Failed to get inet address for public_ip '" + publicHost + "' by name");
         publicHostInetAddr = null;
       }
       if (cluster.getUseHostColumn() == null) {
@@ -181,6 +193,25 @@ public class LoadBalanceService {
           // Both host and public_ip are same
           cluster.setUseHostColumn(Boolean.TRUE);
         }
+        if (cluster.getUseHostColumn() != null) {
+          LOGGER.info("Will use '" + (cluster.getUseHostColumn() ? "host" : "public_ip")
+              + "' address for connections");
+        }
+      }
+    }
+
+    if (cluster == null || uuid == null || hostToNodeInfoMap == null) {
+      LOGGER.warning("yb_servers() returned no rows, skipping refresh");
+      return lb.getUuid();
+    }
+
+    Set<String> removedHosts = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    removedHosts.addAll(hostToNodeInfoMap.keySet());
+    removedHosts.removeAll(hostsInLatestQuery);
+    if (!removedHosts.isEmpty()) {
+      LOGGER.info("Evicting hosts no longer returned by yb_servers(): " + removedHosts);
+      for (String h : removedHosts) {
+        hostToNodeInfoMap.remove(h);
       }
     }
 
@@ -212,11 +243,12 @@ public class LoadBalanceService {
 
   private static void markAsFailed(String uuid, String host) {
     if (uuid == null) {
-      LOGGER.fine("Could not mark down host: " + host + ". UUID not present");
+      LOGGER.info("Could not mark host: " + host + " as DOWN. Cluster UUID not present");
       return;
     }
     NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     if (info == null) {
+      LOGGER.info("Could not mark host: " + host + " as DOWN. Host not found in cluster UUID: " + uuid);
       return; // unexpected
     }
     synchronized (info) {
@@ -224,7 +256,11 @@ public class LoadBalanceService {
       info.isDown = true;
       info.isDownSince = System.currentTimeMillis();
       info.connectionCount = 0;
-      LOGGER.info("Marked " + host + " as DOWN (was " + previous + " earlier)");
+      if (previous.equals("UP")) {
+        LOGGER.info("Marked " + host + " as DOWN (was UP earlier)");
+      } else {
+        LOGGER.fine(host + " is already marked as DOWN");
+      }
     }
   }
 
@@ -359,7 +395,7 @@ public class LoadBalanceService {
       // 2. create control connection and fetch yb_servers() -- refer to LBProperties.checkAndRefresh()
       String uuid = checkAndRefresh(key, lb);
       if (uuid == null) {
-        LOGGER.fine("Attempt to refresh info from yb_servers() failed");
+        LOGGER.warning("Attempt to refresh info from yb_servers() failed");
         return null;
       }
 
@@ -390,14 +426,14 @@ public class LoadBalanceService {
       Properties props, ArrayList<String> timedOutHosts) {
     LoadBalancer lb = getLB(key);
     if (lb == null) {
-      LOGGER.fine("No loadbalancer found for lbkey: " + key);
+      LOGGER.warning("No loadbalancer found for lbkey: " + key);
       return null;
     }
     String uuid = lbKeyToUuidMap.get(key);
     String url = key.getUrl();
 
     if (checkAndRefresh(key, lb) == null) {
-      LOGGER.fine("Attempt to refresh info from yb_servers() failed");
+      LOGGER.warning("Attempt to refresh info from yb_servers() failed");
       return null;
     }
 
@@ -459,17 +495,20 @@ public class LoadBalanceService {
     if (needsRefresh(lb.getRefreshListSeconds(), lb)) {
       String url = key.getUrl();
       Properties properties = new Properties(key.getProperties());
-      properties.setProperty("socketTimeout", "15");
+      // Do not inherit a disabled (0) or large app timeout for this metadata-only path.
+      properties.setProperty("connectTimeout", String.valueOf(CONTROL_CONN_CONNECT_TIMEOUT_SECS));
+      properties.setProperty("socketTimeout", String.valueOf(CONTROL_CONN_SOCKET_TIMEOUT_SECS));
       HostSpec[] hspec = hostSpecs(properties);
       Connection controlConnection = null;
       ArrayList<String> hosts = getAllAvailableHosts(lbKeyToUuidMap.get(key), new ArrayList<>());
+      boolean originalHostsTried = false;
       while (true) {
         boolean refreshFailed = false;
         try {
           if (uuid != null) {
             controlConnection = uuidToClusterInfoMap.get(uuid).getControlConnection();
           }
-          if (controlConnection == null){
+          if (controlConnection == null) {
             controlConnection = new PgConnection(hspec, properties, url);
             if (uuid != null) {
               uuidToClusterInfoMap.get(uuid).setControlConnection(controlConnection);
@@ -485,14 +524,14 @@ public class LoadBalanceService {
           }
         } catch (SQLException ex) {
           if (refreshFailed) {
-            LOGGER.fine("Exception while refreshing: " + ex + ", " + ex.getSQLState());
+            LOGGER.warning("Exception while refreshing: " + ex + ", " + ex.getSQLState());
             String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
             markAsFailed(uuid, failed);
             // Drop the host we just failed to refresh against so we don't retry it indefinitely.
             hosts.remove(failed);
           } else {
             String msg = hspec.length > 1 ? " and others" : "";
-            LOGGER.fine("Exception while creating control connection to "
+            LOGGER.warning("Exception while creating control connection to "
                 + hspec[0].getHost() + msg + ": " + ex + ", " + ex.getSQLState());
             for (HostSpec h : hspec) {
               hosts.remove(h.getHost());
@@ -517,10 +556,13 @@ public class LoadBalanceService {
                 " YugabyteDB, consider upgrading it.");
             return null;
           }
-          // Retry until servers are available
-          if (hosts.isEmpty()) {
+          // Return if control connection failed and no servers are available
+          if ((!refreshFailed || originalHostsTried) && hosts.isEmpty()) {
             LOGGER.warning("Failed to establish control connection to available servers");
             return null;
+          } else if (refreshFailed && !originalHostsTried) {
+            LOGGER.warning("Refresh failed. Retrying with original hspec");
+            originalHostsTried = true;  // continue to try the original hspec once
           } else {
             // Try the first host in the list (don't have to check least loaded one since it's
             // just for the control connection). This also advances off a host whose refresh
@@ -625,6 +667,11 @@ public class LoadBalanceService {
 
     public void setNodeType(String nodeType) {
       this.nodeType = nodeType;
+    }
+
+    public String toString() {
+      return "NodeInfo=[" + host + "," + port + "," + publicIP + "," + nodeType + "," + placement
+          + "," + connectionCount + "," + isDown + "," + isDownSince + "]";
     }
   }
 

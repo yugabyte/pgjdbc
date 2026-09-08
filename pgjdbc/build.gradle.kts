@@ -91,6 +91,9 @@ dependencies {
     testFixturesImplementation("junit:junit:4.13.2")
     testFixturesImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testFixturesImplementation("org.checkerframework:checker-qual:3.42.0")
+
+    testImplementation("org.mockito:mockito-core:5.12.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.12.0")
 }
 
 val skipReplicationTests by props()
