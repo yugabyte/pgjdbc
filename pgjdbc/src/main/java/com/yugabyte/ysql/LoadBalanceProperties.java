@@ -16,8 +16,6 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class LoadBalanceProperties {
@@ -44,8 +42,6 @@ public class LoadBalanceProperties {
    * not too low (1s).
    */
   public static final int DEFAULT_FAILED_HOST_TTL_SECONDS = 5;
-  private static final String PROPERTY_SEP = "&";
-  private static final String EQUALS = "=";
   public static final String LOCATIONS_DELIMITER = ",";
   public static final String PREFERENCE_DELIMITER = ":";
   public static final int MAX_PREFERENCE_VALUE = 10;
@@ -60,10 +56,6 @@ public class LoadBalanceProperties {
    */
   private static final Map<String, LoadBalancer> CONNECTION_MANAGER_MAP =
       new HashMap<>();
-  private static final Map<LoadBalancerKey, LoadBalanceProperties> loadBalancePropertiesMap =
-      new ConcurrentHashMap<>();
-  private final String originalUrl;
-  private final Properties originalProperties;
 
   /**
    * FOR TEST PURPOSE ONLY
@@ -75,23 +67,7 @@ public class LoadBalanceProperties {
     }
   }
 
-  public static LoadBalanceProperties getLoadBalanceProperties(LoadBalancerKey key) {
-    LoadBalanceProperties lbp = loadBalancePropertiesMap.get(key);
-    if (lbp == null) {
-      synchronized (LoadBalanceProperties.class) {
-        lbp = loadBalancePropertiesMap.get(key);
-        if (lbp == null) {
-          lbp = new LoadBalanceProperties(key);
-          loadBalancePropertiesMap.put(key, lbp);
-        }
-      }
-    }
-    return lbp;
-  }
-
-  private LoadBalanceProperties(LoadBalancerKey key) {
-    originalUrl = key.getUrl();
-    originalProperties = (Properties) key.getProperties().clone();
+  private LoadBalanceProperties() {
   }
 
   public static ProcessedProperties processURLAndProperties(String url, Properties properties) {
@@ -159,14 +135,6 @@ public class LoadBalanceProperties {
       LOGGER.warning("Provided value (" + propValue + ") is invalid, using the default value instead");
       return defaultValue;
     }
-  }
-
-  public String getOriginalURL() {
-    return originalUrl;
-  }
-
-  public Properties getOriginalProperties() {
-    return originalProperties;
   }
 
   public static boolean isLoadBalanceEnabled(LoadBalancerKey key) {

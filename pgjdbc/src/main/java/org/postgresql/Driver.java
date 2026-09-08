@@ -23,8 +23,6 @@ package org.postgresql;
 
 import static org.postgresql.util.internal.Nullness.castNonNull;
 
-import com.yugabyte.ysql.LoadBalancer;
-
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.jdbc.ResourceLock;
 import org.postgresql.jdbcurlresolver.PgPassParser;
@@ -316,7 +314,6 @@ public class Driver implements java.sql.Driver {
       // more details.
       long timeout = timeout(props);
       LoadBalanceProperties.LoadBalancerKey key = new LoadBalanceProperties.LoadBalancerKey(url, props);
-      LoadBalanceProperties lbprops = LoadBalanceProperties.getLoadBalanceProperties(key);
       if (timeout <= 0) {
         return makeConnection(key,null);
       }
