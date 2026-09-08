@@ -17,7 +17,13 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,9 +37,6 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
   protected static final String GET_SERVERS_QUERY = "select * from yb_servers()";
   protected Boolean useHostColumn = null;
 
-
-
-
   private static final int TYPE_DNS_NAME = 2;
   private static final int TYPE_IP_ADDRESS = 7;
   private final Properties originalProperties;
@@ -43,10 +46,9 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
   private final PGStream stream;
   private static Connection controlConnection = null;
 
-  public YBManagedHostnameVerifier(Properties props, PGStream stream){
+  public YBManagedHostnameVerifier(Properties props, PGStream stream) {
     this.originalProperties = props;
-    this.stream= stream;
-
+    this.stream = stream;
   }
 
   @Override
@@ -127,12 +129,9 @@ public class YBManagedHostnameVerifier implements HostnameVerifier {
     }
     if (hostlist.contains(hostname)) {
       return true;
-    }
-    else {
+    } else {
       return false;
     }
-
-
   }
 
   private ArrayList<String> getCurrentServers(Connection conn) throws SQLException {

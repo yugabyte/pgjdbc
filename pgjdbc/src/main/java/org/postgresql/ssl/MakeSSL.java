@@ -68,11 +68,10 @@ public class MakeSSL extends ObjectFactory {
     if (sslhostnameverifier == null) {
       hvn = PGjdbcHostnameVerifier.INSTANCE;
       sslhostnameverifier = "PgjdbcHostnameVerifier";
-    }
-    else if (sslhostnameverifier.equalsIgnoreCase("com.yugabyte.ysql.YBManagedHostnameVerifier")){
-      hvn = new YBManagedHostnameVerifier(info,stream);
-    }
-    else {
+    } else if (sslhostnameverifier.equalsIgnoreCase(
+        "com.yugabyte.ysql.YBManagedHostnameVerifier")) {
+      hvn = new YBManagedHostnameVerifier(info, stream);
+    } else {
       try {
         hvn = instantiate(HostnameVerifier.class, sslhostnameverifier, info, false, null);
       } catch (Exception e) {

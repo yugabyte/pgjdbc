@@ -5,7 +5,10 @@ import static com.yugabyte.ysql.LoadBalanceProperties.FAILED_HOST_RECONNECT_DELA
 import static org.postgresql.Driver.hostSpecs;
 
 import org.postgresql.jdbc.PgConnection;
-import org.postgresql.util.*;
+import org.postgresql.util.GT;
+import org.postgresql.util.HostSpec;
+import org.postgresql.util.PSQLException;
+import org.postgresql.util.PSQLState;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -13,7 +16,13 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -86,7 +95,7 @@ public class LoadBalanceService {
    * @param refreshInterval The interval at which refresh is done
    * @param lb              The load balancer for this connection
    * @return the value of the universe_uuid of the cluster
-   * @throws SQLException
+   * @throws SQLException if the yb_servers() query fails
    */
   private static synchronized String refresh(Connection conn, long refreshInterval,
       LoadBalancer lb) throws SQLException {
@@ -127,8 +136,8 @@ public class LoadBalanceService {
         }
       }
       if (hostToNodeInfoMap == null) {
-        hostToNodeInfoMap = cluster.getHostToNodeInfoMap() != null ?
-            cluster.getHostToNodeInfoMap() : new ConcurrentHashMap<>();
+        hostToNodeInfoMap = cluster.getHostToNodeInfoMap() != null
+            ? cluster.getHostToNodeInfoMap() : new ConcurrentHashMap<>();
       }
       NodeInfo nodeInfo = hostToNodeInfoMap.containsKey(host) ? hostToNodeInfoMap.get(host) :
           new NodeInfo();
@@ -446,7 +455,7 @@ public class LoadBalanceService {
   }
 
   /**
-   * @param key
+   * @param key the key identifying the cluster whose server list may need a refresh
    * @param lb  LoadBalancer instance
    * @return universe_uuid if the refresh was not required or if it was successful.
    */
@@ -469,7 +478,7 @@ public class LoadBalanceService {
           if (uuid != null) {
             controlConnection = uuidToClusterInfoMap.get(uuid).getControlConnection();
           }
-          if (controlConnection == null){
+          if (controlConnection == null) {
             controlConnection = new PgConnection(hspec, properties, url);
             if (uuid != null) {
               uuidToClusterInfoMap.get(uuid).setControlConnection(controlConnection);
@@ -512,9 +521,9 @@ public class LoadBalanceService {
           }
           controlConnection = null;
           if (PSQLState.UNDEFINED_FUNCTION.getState().equals(ex.getSQLState())) {
-            LOGGER.warning("Received UNDEFINED_FUNCTION for yb_servers()" +
-                " (SQLState=42883). You may be using an older version of" +
-                " YugabyteDB, consider upgrading it.");
+            LOGGER.warning("Received UNDEFINED_FUNCTION for yb_servers()"
+                + " (SQLState=42883). You may be using an older version of"
+                + " YugabyteDB, consider upgrading it.");
             return null;
           }
           // Retry until servers are available
@@ -557,26 +566,26 @@ public class LoadBalanceService {
   static boolean isRightNodeType(LoadBalanceType loadBalance, String nodeType, byte requestFlags) {
     LOGGER.fine("loadBalance " + loadBalance + ", nodeType: " + nodeType + ", requestFlags: " + requestFlags);
     switch (loadBalance) {
-    case ANY:
-      return true;
-    case ONLY_PRIMARY:
-      return nodeType.equalsIgnoreCase("primary");
-    case ONLY_RR:
-      return nodeType.equalsIgnoreCase("read_replica");
-    case PREFER_PRIMARY:
-      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+      case ANY:
+        return true;
+      case ONLY_PRIMARY:
         return nodeType.equalsIgnoreCase("primary");
-      } else {
-        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
-      }
-    case PREFER_RR:
-      if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+      case ONLY_RR:
         return nodeType.equalsIgnoreCase("read_replica");
-      } else {
-        return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
-      }
-    default:
-      return false;
+      case PREFER_PRIMARY:
+        if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+          return nodeType.equalsIgnoreCase("primary");
+        } else {
+          return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
+        }
+      case PREFER_RR:
+        if (requestFlags == LoadBalanceService.STRICT_PREFERENCE) {
+          return nodeType.equalsIgnoreCase("read_replica");
+        } else {
+          return nodeType.equalsIgnoreCase("primary") || nodeType.equalsIgnoreCase("read_replica");
+        }
+      default:
+        return false;
     }
   }
 
