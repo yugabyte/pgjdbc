@@ -6,6 +6,10 @@
 
 <suppressions>
     <suppress checks=".*" files=".*[/\\]messages_[^.]*.java"/>
+    <!-- Sources under com/yugabyte/ysql are YugaByte-authored and carry an Apache 2.0
+         header, not the PostgreSQL Global Development Group header RegexpHeader expects. -->
+    <suppress checks="RegexpHeader"
+              files=".*[/\\]com[/\\]yugabyte[/\\]ysql[/\\].*\.java"/>
     <suppress checks="AvoidEscapedUnicodeCharacters"
               files="DatabaseEncodingTest.java"/>
 </suppressions>

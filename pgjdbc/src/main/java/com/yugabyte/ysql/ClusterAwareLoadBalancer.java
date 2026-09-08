@@ -66,15 +66,15 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
     }
     int refreshInterval = processedProperties.getRefreshInterval();
     this.refreshListSeconds =
-        refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
-            refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+        refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL
+            ? refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
     this.explicitFallbackOnly = processedProperties.isExplicitFallbackOnly();
     this.failedHostReconnectDelaySecs = processedProperties.getFailedHostReconnectDelaySecs();
   }
 
   public String toString() {
-    return this.getClass().getSimpleName() + ": loadBalance = " +
-        loadBalance + ", refreshInterval = " + refreshListSeconds;
+    return this.getClass().getSimpleName() + ": loadBalance = "
+        + loadBalance + ", refreshInterval = " + refreshListSeconds;
   }
 
   @Override
@@ -92,8 +92,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       attempted.addAll(timedOutHosts);
     }
     requestFlags = newRequest ? LoadBalanceService.STRICT_PREFERENCE : requestFlags;
-    LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts +
-        ", timedOutHosts: " + timedOutHosts + ", requestFlags: " + requestFlags);
+    LOGGER.fine("newRequest: " + newRequest + ", failedHosts: " + failedHosts
+        + ", timedOutHosts: " + timedOutHosts + ", requestFlags: " + requestFlags);
     String chosenHost = null;
 
     while (true) {
@@ -132,8 +132,8 @@ public class ClusterAwareLoadBalancer implements LoadBalancer {
       }
     }
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
-    if (chosenHost == null && (loadBalance == LoadBalanceType.ONLY_PRIMARY ||
-        loadBalance == LoadBalanceType.ONLY_RR)) {
+    if (chosenHost == null && (loadBalance == LoadBalanceType.ONLY_PRIMARY
+        || loadBalance == LoadBalanceType.ONLY_RR)) {
       throw new IllegalStateException("No node available in "
           + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" : "read-replica")
           + " cluster to connect to.");
