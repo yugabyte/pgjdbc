@@ -1,3 +1,8 @@
+import org.gradle.api.publish.plugins.PublishingPlugin
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Base64
+
 plugins {
     id("java-library")
     id("maven-publish")
@@ -16,6 +21,12 @@ val localRepoElements by configurations.creating {
 
 val localRepoDir = layout.buildDirectory.dir("local-maven-repo")
 
+// oss.sonatype.org (legacy OSSRH) is decommissioned and now answers every request with
+// HTTP 402. Sonatype's drop-in replacement for the old staging API lives at the host
+// below. Override with OSSRH_STAGING_API if it ever moves again.
+val ossrhStagingApi = System.getenv("OSSRH_STAGING_API")
+    ?: "https://ossrh-staging-api.central.sonatype.com"
+
 publishing {
     repositories {
         maven {
@@ -24,7 +35,7 @@ publishing {
         }
         maven {
             name = "remote"
-            url = uri("https://oss.sonatype.org/service/local/staging/deploy/maven2/")
+            url = uri(System.getenv("OSSRH_URL") ?: "$ossrhStagingApi/service/local/staging/deploy/maven2/")
             credentials {
                 username = System.getenv("OSSRH_USERNAME")
                 password = System.getenv("OSSRH_PASSWORD")
@@ -47,3 +58,70 @@ tasks.withType<PublishToMavenRepository>()
     .configureEach {
         dependsOn(cleanLocalRepository)
     }
+
+// Uploading to the staging API only leaves an *open* staging repository behind; it does not
+// reach the Central Portal on its own. This hands it over, after which the deployment shows up
+// at https://central.sonatype.com/publishing/deployments.
+//
+// Note the credentials must be a Central Portal user token. The staging API still accepts legacy
+// OSSRH tokens when deploying artifacts, but rejects them here with a 401.
+val promoteStagingRepository by tasks.registering {
+    description = "Hands the open OSSRH staging repository over to the Central Portal"
+    group = PublishingPlugin.PUBLISH_TASK_GROUP
+
+    val namespace = providers.gradleProperty("centralNamespace")
+        .orElse(provider { project.group.toString() })
+    // "user_managed" leaves the release to Maven Central as a manual step in the Portal UI.
+    // Pass -PcentralPublishingType=automatic to release as soon as validation passes.
+    val publishingType = providers.gradleProperty("centralPublishingType").orElse("user_managed")
+    val username = providers.environmentVariable("OSSRH_USERNAME")
+    val password = providers.environmentVariable("OSSRH_PASSWORD")
+
+    doLast {
+        val user = username.orNull
+            ?: throw GradleException("OSSRH_USERNAME is not set, cannot promote the staging repository")
+        val secret = password.orNull
+            ?: throw GradleException("OSSRH_PASSWORD is not set, cannot promote the staging repository")
+        val bearer = Base64.getEncoder().encodeToString("$user:$secret".toByteArray())
+
+        val endpoint = "$ossrhStagingApi/manual/upload/defaultRepository/${namespace.get()}" +
+            "?publishing_type=${publishingType.get()}"
+        logger.lifecycle("Promoting staging repository for ${namespace.get()} to the Central Portal")
+
+        val connection = URL(endpoint).openConnection() as HttpURLConnection
+        val (code, body) = try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Authorization", "Bearer $bearer")
+            connection.connectTimeout = 60_000
+            connection.readTimeout = 15 * 60_000
+            val status = connection.responseCode
+            val stream = if (status < HttpURLConnection.HTTP_BAD_REQUEST) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+            status to stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        } finally {
+            connection.disconnect()
+        }
+
+        if (code !in 200..299) {
+            throw GradleException(
+                "Could not promote the staging repository for ${namespace.get()}. " +
+                    "Received status code $code from $ossrhStagingApi${if (body.isBlank()) "" else ": $body"}"
+            )
+        }
+        logger.lifecycle("Staging repository handed over, review it at https://central.sonatype.com/publishing/deployments")
+    }
+}
+
+val publishToCentralPortal by tasks.registering {
+    description = "Publishes to the OSSRH staging repository and hands it over to the Central Portal"
+    group = PublishingPlugin.PUBLISH_TASK_GROUP
+    dependsOn(tasks.named("publishAllPublicationsToRemoteRepository"))
+    dependsOn(promoteStagingRepository)
+}
+
+promoteStagingRepository {
+    mustRunAfter(tasks.named("publishAllPublicationsToRemoteRepository"))
+}
