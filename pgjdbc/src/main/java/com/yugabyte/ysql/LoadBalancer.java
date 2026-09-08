@@ -31,7 +31,7 @@ public interface LoadBalancer {
 
   /**
    * @return the value of the property "yb-servers-refresh-interval" specified either in the url or
-   * as a property
+   *     as a property
    */
   int getRefreshListSeconds();
 

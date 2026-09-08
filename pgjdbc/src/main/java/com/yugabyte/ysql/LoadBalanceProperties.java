@@ -10,6 +10,7 @@
 // or implied.  See the License for the specific language governing permissions and limitations
 // under the License.
 //
+
 package com.yugabyte.ysql;
 
 import java.util.HashMap;
@@ -17,7 +18,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class LoadBalanceProperties {
@@ -127,22 +127,22 @@ public class LoadBalanceProperties {
       return LoadBalanceService.LoadBalanceType.FALSE;
     }
     switch (value.toLowerCase(Locale.ROOT)) {
-    case "true":
-    case "any":
-      return LoadBalanceService.LoadBalanceType.ANY;
-    case "prefer-primary":
-      return LoadBalanceService.LoadBalanceType.PREFER_PRIMARY;
-    case "prefer-rr":
-      return LoadBalanceService.LoadBalanceType.PREFER_RR;
-    case "only-primary":
-      return LoadBalanceService.LoadBalanceType.ONLY_PRIMARY;
-    case "only-rr":
-      return LoadBalanceService.LoadBalanceType.ONLY_RR;
-    case "false":
-      return LoadBalanceService.LoadBalanceType.FALSE;
-    default:
-      LOGGER.warning("Invalid value for load-balance: " + value + ", ignoring it.");
-      return LoadBalanceService.LoadBalanceType.FALSE;
+      case "true":
+      case "any":
+        return LoadBalanceService.LoadBalanceType.ANY;
+      case "prefer-primary":
+        return LoadBalanceService.LoadBalanceType.PREFER_PRIMARY;
+      case "prefer-rr":
+        return LoadBalanceService.LoadBalanceType.PREFER_RR;
+      case "only-primary":
+        return LoadBalanceService.LoadBalanceType.ONLY_PRIMARY;
+      case "only-rr":
+        return LoadBalanceService.LoadBalanceType.ONLY_RR;
+      case "false":
+        return LoadBalanceService.LoadBalanceType.FALSE;
+      default:
+        LOGGER.warning("Invalid value for load-balance: " + value + ", ignoring it.");
+        return LoadBalanceService.LoadBalanceType.FALSE;
     }
   }
 
@@ -200,10 +200,10 @@ public class LoadBalanceProperties {
     }
 
     public boolean equals(Object other) {
-      return other instanceof LoadBalancerKey &&
-          url != null && url.equals(((LoadBalancerKey) other).url) &&
-          properties != null &&
-          properties.equals(((LoadBalancerKey) other).properties);
+      return other instanceof LoadBalancerKey
+          && url != null && url.equals(((LoadBalancerKey) other).url)
+          && properties != null
+          && properties.equals(((LoadBalancerKey) other).properties);
     }
   }
 

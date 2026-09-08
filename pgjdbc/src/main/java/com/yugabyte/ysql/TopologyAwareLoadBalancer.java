@@ -13,7 +13,6 @@
 
 package com.yugabyte.ysql;
 
-import static com.yugabyte.ysql.LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
 import static com.yugabyte.ysql.LoadBalanceProperties.LOCATIONS_DELIMITER;
 import static com.yugabyte.ysql.LoadBalanceProperties.MAX_PREFERENCE_VALUE;
 import static com.yugabyte.ysql.LoadBalanceProperties.PREFERENCE_DELIMITER;
@@ -45,8 +44,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
    * Derived from the placements value above.
    */
   private final Map<Integer, Set<LoadBalanceService.CloudPlacement>> allowedPlacements = new HashMap<>();
-  private final int PRIMARY_PLACEMENTS_INDEX = 1;
-  private final int REST_OF_CLUSTER_INDEX = -1;
+  private static final int PRIMARY_PLACEMENTS_INDEX = 1;
+  private static final int REST_OF_CLUSTER_INDEX = -1;
   /**
    * The index of placement level currently being used for new connection request. It is always
    * reset to zero for a new connection request.
@@ -79,8 +78,8 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     explicitFallbackOnly = processedProperties.isExplicitFallbackOnly();
     int refreshInterval = processedProperties.getRefreshInterval();
     refreshIntervalSeconds =
-        refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL ?
-            refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
+        refreshInterval >= 0 && refreshInterval <= LoadBalanceProperties.MAX_REFRESH_INTERVAL
+            ? refreshInterval : LoadBalanceProperties.DEFAULT_REFRESH_INTERVAL;
     this.failedHostReconnectDelaySecs = processedProperties.getFailedHostReconnectDelaySecs();
     parseGeoLocations();
   }
@@ -232,10 +231,10 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
         }
         if (currentPlacementIndex == 0) {
           // No host found in entire cluster. Relax the STRICT_PREFERENCE if load-balance is prefer-*
-          if (requestFlags == LoadBalanceService.STRICT_PREFERENCE &&
-              (loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR)) {
-            LOGGER.fine("Even rest of cluster did not have a host for us." +
-                " So relax the node type condition for prefer-* and try again once");
+          if (requestFlags == LoadBalanceService.STRICT_PREFERENCE
+              && (loadBalance == LoadBalanceType.PREFER_PRIMARY || loadBalance == LoadBalanceType.PREFER_RR)) {
+            LOGGER.fine("Even rest of cluster did not have a host for us."
+                + " So relax the node type condition for prefer-* and try again once");
             currentPlacementIndex = REST_OF_CLUSTER_INDEX;
             requestFlags = (byte) 0;
           } else {
@@ -249,13 +248,13 @@ public class TopologyAwareLoadBalancer implements LoadBalancer {
     LOGGER.fine("Host chosen for new connection: " + chosenHost);
     // Throw error if no host is found AND load-balance=only-* OR
     // load-balance=any AND fallback-to-topology-keys-only is true
-    if (chosenHost == null &&
-        (loadBalance == LoadBalanceType.ONLY_PRIMARY || loadBalance == LoadBalanceType.ONLY_RR ||
-            (loadBalance == LoadBalanceType.ANY && explicitFallbackOnly))) {
-      throw new IllegalStateException("No node available in the given placements for the " +
-          (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary" :
-              (loadBalance == LoadBalanceType.ONLY_RR ? "read-replica" : "entire")) +
-          " cluster to connect to.");
+    if (chosenHost == null
+        && (loadBalance == LoadBalanceType.ONLY_PRIMARY || loadBalance == LoadBalanceType.ONLY_RR
+            || (loadBalance == LoadBalanceType.ANY && explicitFallbackOnly))) {
+      throw new IllegalStateException("No node available in the given placements for the "
+          + (loadBalance == LoadBalanceType.ONLY_PRIMARY ? "primary"
+              : (loadBalance == LoadBalanceType.ONLY_RR ? "read-replica" : "entire"))
+          + " cluster to connect to.");
     }
     return chosenHost;
   }
