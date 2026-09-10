@@ -14,8 +14,6 @@ import org.postgresql.util.ObjectFactory;
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.PSQLState;
 
-import com.yugabyte.ysql.YBManagedHostnameVerifier;
-
 import java.io.IOException;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -68,9 +66,6 @@ public class MakeSSL extends ObjectFactory {
     if (sslhostnameverifier == null) {
       hvn = PGjdbcHostnameVerifier.INSTANCE;
       sslhostnameverifier = "PgjdbcHostnameVerifier";
-    }
-    else if (sslhostnameverifier.equalsIgnoreCase("com.yugabyte.ysql.YBManagedHostnameVerifier")){
-      hvn = new YBManagedHostnameVerifier(info,stream);
     }
     else {
       try {
