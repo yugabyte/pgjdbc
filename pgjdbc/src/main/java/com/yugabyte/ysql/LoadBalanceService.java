@@ -388,6 +388,18 @@ public class LoadBalanceService {
 
   private static Connection getConnection(LoadBalanceProperties.LoadBalancerKey key,
       Properties props, ArrayList<String> timedOutHosts) {
+    // Remember the host the user configured before we start replacing it with node addresses.
+    // TLS hostname verification needs it: a cluster-wide certificate is issued for this name,
+    // not for the individual node we are about to dial. props is a per-connection clone, so
+    // this does not leak into the caller's Properties.
+    String endpointHost = props.getProperty("PGHOST");
+    if (endpointHost != null
+        && props.getProperty(LoadBalanceProperties.ENDPOINT_HOST_KEY) == null) {
+      props.setProperty(LoadBalanceProperties.ENDPOINT_HOST_KEY, endpointHost);
+      LOGGER.fine("Saved cluster endpoint '" + endpointHost + "' as "
+          + LoadBalanceProperties.ENDPOINT_HOST_KEY
+          + " for TLS hostname verification of node connections");
+    }
     LoadBalancer lb = getLB(key);
     if (lb == null) {
       LOGGER.fine("No loadbalancer found for lbkey: " + key);
@@ -460,6 +472,17 @@ public class LoadBalanceService {
       String url = key.getUrl();
       Properties properties = new Properties(key.getProperties());
       properties.setProperty("socketTimeout", "15");
+      // Preserve the host from the URL for TLS hostname verification. The first attempt below
+      // dials this host, but the retry path points the control connection at a node address
+      // from yb_servers(), which a cluster-wide certificate does not cover.
+      String endpointHost = properties.getProperty("PGHOST");
+      if (endpointHost != null
+          && properties.getProperty(LoadBalanceProperties.ENDPOINT_HOST_KEY) == null) {
+        properties.setProperty(LoadBalanceProperties.ENDPOINT_HOST_KEY, endpointHost);
+        LOGGER.fine("Saved cluster endpoint '" + endpointHost + "' as "
+            + LoadBalanceProperties.ENDPOINT_HOST_KEY
+            + " for TLS hostname verification of the control connection");
+      }
       HostSpec[] hspec = hostSpecs(properties);
       Connection controlConnection = null;
       ArrayList<String> hosts = getAllAvailableHosts(lbKeyToUuidMap.get(key), new ArrayList<>());
