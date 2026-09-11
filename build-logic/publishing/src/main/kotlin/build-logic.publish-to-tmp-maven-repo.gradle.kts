@@ -24,7 +24,12 @@ val localRepoDir = layout.buildDirectory.dir("local-maven-repo")
 // oss.sonatype.org (legacy OSSRH) is decommissioned and now answers every request with
 // HTTP 402. Sonatype's drop-in replacement for the old staging API lives at the host
 // below. Override with OSSRH_STAGING_API if it ever moves again.
-val ossrhStagingApi = System.getenv("OSSRH_STAGING_API")
+//
+// Both the deploy repository and the promotion request are derived from this single value so
+// they cannot drift apart. Blank is treated as unset: CI passes an undefined secret through as
+// an empty string, and an empty URL would otherwise resolve to a local directory, making a
+// release silently publish nothing.
+val ossrhStagingApi = System.getenv("OSSRH_STAGING_API")?.takeIf { it.isNotBlank() }
     ?: "https://ossrh-staging-api.central.sonatype.com"
 
 publishing {
@@ -35,7 +40,7 @@ publishing {
         }
         maven {
             name = "remote"
-            url = uri(System.getenv("OSSRH_URL") ?: "$ossrhStagingApi/service/local/staging/deploy/maven2/")
+            url = uri("$ossrhStagingApi/service/local/staging/deploy/maven2/")
             credentials {
                 username = System.getenv("OSSRH_USERNAME")
                 password = System.getenv("OSSRH_PASSWORD")
@@ -91,6 +96,9 @@ val promoteStagingRepository by tasks.registering {
         val connection = URL(endpoint).openConnection() as HttpURLConnection
         val (code, body) = try {
             connection.requestMethod = "POST"
+            // HttpURLConnection silently downgrades a redirected POST to a GET, which would
+            // report success while promoting nothing. Surface 3xx as a failure instead.
+            connection.instanceFollowRedirects = false
             connection.setRequestProperty("Authorization", "Bearer $bearer")
             connection.connectTimeout = 60_000
             connection.readTimeout = 15 * 60_000
@@ -115,13 +123,31 @@ val promoteStagingRepository by tasks.registering {
     }
 }
 
+val remotePublish = tasks.named("publishAllPublicationsToRemoteRepository")
+
+// The task above is a lifecycle aggregate: it never fails itself, only the per-publication
+// upload tasks below do. Those are what the promotion has to be gated on.
+val remoteUploads = tasks.withType<PublishToMavenRepository>()
+    .matching { it.repository?.name == "remote" }
+
 val publishToCentralPortal by tasks.registering {
     description = "Publishes to the OSSRH staging repository and hands it over to the Central Portal"
     group = PublishingPlugin.PUBLISH_TASK_GROUP
-    dependsOn(tasks.named("publishAllPublicationsToRemoteRepository"))
+    dependsOn(remotePublish)
     dependsOn(promoteStagingRepository)
 }
 
 promoteStagingRepository {
-    mustRunAfter(tasks.named("publishAllPublicationsToRemoteRepository"))
+    mustRunAfter(remotePublish)
+    // mustRunAfter only orders the tasks. Under --continue Gradle keeps going after a failure,
+    // so without this an upload that failed halfway would still be promoted to the Portal.
+    onlyIf {
+        val failed = remoteUploads.filter { it.state.failure != null }
+        if (failed.isNotEmpty()) {
+            logger.lifecycle(
+                "Skipping promotion because the upload failed: " + failed.joinToString { it.name }
+            )
+        }
+        failed.isEmpty()
+    }
 }
