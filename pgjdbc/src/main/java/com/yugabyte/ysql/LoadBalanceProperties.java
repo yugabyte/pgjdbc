@@ -23,6 +23,16 @@ import java.util.logging.Logger;
 public class LoadBalanceProperties {
   public static final String LOAD_BALANCE_PROPERTY_KEY = "load-balance";
   public static final String TOPOLOGY_AWARE_PROPERTY_KEY = "topology-keys";
+  /**
+   * Set by the driver, not by the user. When load balancing replaces the host from the connection
+   * URL with a node address from yb_servers(), the original host is stashed here so that TLS
+   * hostname verification can still be performed against the name the user configured. A cluster
+   * whose nodes share one certificate issued for the cluster endpoint (YugabyteDB Aeon) cannot be
+   * verified against a per-node address.
+   *
+   * @see YBManagedHostnameVerifier
+   */
+  public static final String ENDPOINT_HOST_KEY = "yb-endpoint-host";
   public static final String REFRESH_INTERVAL_KEY = "yb-servers-refresh-interval";
   /**
    * The value can either be true or false. Default is false.
