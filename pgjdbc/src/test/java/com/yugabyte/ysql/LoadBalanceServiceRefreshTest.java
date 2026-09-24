@@ -165,8 +165,14 @@ class LoadBalanceServiceRefreshTest {
         "Host down for <300s should NOT be evicted even if absent from yb_servers()");
   }
 
+  /**
+   * hostToNodeInfoMap is case-sensitive, so a host returned under a different spelling is a
+   * different key. It replaces the old entry rather than being matched to it: comparing
+   * case-insensitively while keying case-sensitively would insert the new spelling and leave
+   * the old one looking "still present", so it could never be evicted.
+   */
   @Test
-  void removedHostDetectionIsCaseInsensitive() throws SQLException {
+  void hostReturnedWithDifferentCaseReplacesStaleEntry() throws SQLException {
     String uuid = "test-uuid";
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> hostMap = new ConcurrentHashMap<>();
     addNodeInfo(hostMap, "HostA", "10.0.0.1", 5433, "aws", "us-west", "us-west-2a");
@@ -181,8 +187,7 @@ class LoadBalanceServiceRefreshTest {
     cluster.setControlConnection(mockConn);
     LoadBalanceService.uuidToClusterInfoMap.put(uuid, cluster);
 
-    // yb_servers() returns "hosta" (lowercase) — should match "HostA" case-insensitively
-    // "HostB" is missing, so it should be detected as removed
+    // yb_servers() returns "hosta" (lowercase); "HostB" is gone from the cluster entirely.
     setupResultSetRows(
         row("hosta", "10.0.0.1", "5433", "aws", "us-west", "us-west-2a", "primary", uuid)
     );
@@ -192,12 +197,73 @@ class LoadBalanceServiceRefreshTest {
 
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
         LoadBalanceService.uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
-    // "HostA" matched "hosta" case-insensitively, so it should NOT appear in removed set.
-    // It stays in the map (keyed as "HostA" since putIfAbsent won't overwrite).
-    assertTrue(updatedMap.containsKey("HostA"));
-    // "HostB" was removed and down >300s, so it should be evicted
-    assertFalse(updatedMap.containsKey("HostB"),
-        "Case-insensitive match should detect 'HostB' as removed and evict it");
+    assertTrue(updatedMap.containsKey("hosta"), "the spelling yb_servers() returned is kept");
+    assertFalse(updatedMap.containsKey("HostA"),
+        "the stale spelling must be evicted, not left behind as a duplicate of the same node");
+    assertFalse(updatedMap.containsKey("HostB"), "a host no longer returned must be evicted");
+    assertEquals(1, updatedMap.size(), "one entry per node returned by yb_servers()");
+  }
+
+  /**
+   * Public-IP cluster: yb_servers() reports the private address in "host" and the routable
+   * address in "public_ip", so the previous refresh left the map keyed by public_ip. A refresh
+   * that still reports the node must not reset its connection count.
+   */
+  @Test
+  void publicIpKeyedMapRetainsConnectionCountAcrossRefresh() throws SQLException {
+    String uuid = "test-uuid";
+    seedPublicIpKeyedCluster(uuid);
+
+    LoadBalanceService.refresh(mockConn, 300, lb);
+
+    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
+        LoadBalanceService.uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
+    assertEquals(2, updatedMap.size(), "map should hold one entry per node, keyed by public_ip");
+    assertTrue(updatedMap.containsKey("node-a.example.com"));
+    assertEquals(5, updatedMap.get("node-a.example.com").getConnectionCount(),
+        "connection count must survive a refresh that still reports the node");
+  }
+
+  /**
+   * Same setup, for the DOWN state: a node marked down stays down until
+   * failed-host-reconnect-delay-secs elapses, otherwise the balancer immediately re-picks a node
+   * it just failed to reach.
+   */
+  @Test
+  void publicIpKeyedMapRetainsDownStateAcrossRefresh() throws SQLException {
+    String uuid = "test-uuid";
+    seedPublicIpKeyedCluster(uuid);
+
+    LoadBalanceService.refresh(mockConn, 300, lb);
+
+    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
+        LoadBalanceService.uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
+    assertTrue(updatedMap.containsKey("node-b.example.com"));
+    assertTrue(updatedMap.get("node-b.example.com").isDown(),
+        "a host marked DOWN must stay DOWN until failed-host-reconnect-delay-secs elapses");
+  }
+
+  /**
+   * Same public-IP shape, but the driver could not decide which address set to use: the control
+   * connection is to an endpoint that is neither the node's host nor its public_ip (a k8s service
+   * or load balancer), and public_ip does not resolve. useHostColumn stays null, yet the tail of
+   * refresh() still re-keys the map by public_ip because publicIPsGivenForAll is true.
+   */
+  @Test
+  void undeterminedHostColumnWithPublicIpsRetainsNodeState() throws SQLException {
+    String uuid = "test-uuid";
+    seedPublicIpKeyedCluster(uuid);
+    // The driver never managed to determine this; the previous refresh still re-keyed the map.
+    LoadBalanceService.uuidToClusterInfoMap.get(uuid).setUseHostColumn(null);
+
+    LoadBalanceService.refresh(mockConn, 300, lb);
+
+    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
+        LoadBalanceService.uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
+    assertTrue(updatedMap.containsKey("node-a.example.com"),
+        "map should still be keyed by public_ip");
+    assertEquals(5, updatedMap.get("node-a.example.com").getConnectionCount(),
+        "connection count must survive a refresh that still reports the node");
   }
 
   @Test
@@ -310,6 +376,58 @@ class LoadBalanceServiceRefreshTest {
       java.lang.reflect.Field isDownSinceField = LoadBalanceService.NodeInfo.class.getDeclaredField("isDownSince");
       isDownSinceField.setAccessible(true);
       isDownSinceField.setLong(info, downSince);
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Seeds a two-node cluster in the state a previous refresh leaves behind on a public-IP
+   * cluster: map keyed by public_ip, useHostColumn FALSE. Node A carries 5 connections, node B
+   * was just marked DOWN. yb_servers() then reports both nodes as still present.
+   */
+  private void seedPublicIpKeyedCluster(String uuid) throws SQLException {
+    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> hostMap = new ConcurrentHashMap<>();
+    LoadBalanceService.NodeInfo nodeA =
+        addNodeInfo(hostMap, "10.0.0.1", "node-a.example.com", 5433, "aws", "us-west", "us-west-2a");
+    LoadBalanceService.NodeInfo nodeB =
+        addNodeInfo(hostMap, "10.0.0.2", "node-b.example.com", 5433, "aws", "us-west", "us-west-2b");
+    keyByPublicIp(hostMap, nodeA);
+    keyByPublicIp(hostMap, nodeB);
+
+    setConnectionCount(nodeA, 5);
+    markAsDown(nodeB, System.currentTimeMillis());
+
+    LoadBalanceService.ClusterInfo cluster = new LoadBalanceService.ClusterInfo();
+    cluster.setHostToNodeInfoMap(hostMap);
+    cluster.setUseHostColumn(Boolean.FALSE);
+    // The previous refresh re-keyed the map by public_ip and recorded that on the cluster.
+    cluster.setKeyedByPublicIp(true);
+    cluster.setControlConnection(mockConn);
+    LoadBalanceService.uuidToClusterInfoMap.put(uuid, cluster);
+
+    setupResultSetRows(
+        row("10.0.0.1", "node-a.example.com", "5433", "aws", "us-west", "us-west-2a", "primary",
+            uuid),
+        row("10.0.0.2", "node-b.example.com", "5433", "aws", "us-west", "us-west-2b", "primary",
+            uuid)
+    );
+    lb.setUuid(uuid);
+  }
+
+  /** Re-keys an entry by its public_ip, as the tail of refresh() does for public-IP clusters. */
+  private static void keyByPublicIp(ConcurrentHashMap<String, LoadBalanceService.NodeInfo> map,
+      LoadBalanceService.NodeInfo info) {
+    map.remove(info.getHost());
+    map.put(info.getPublicIP(), info);
+  }
+
+  private static void setConnectionCount(LoadBalanceService.NodeInfo info, int count) {
+    try {
+      java.lang.reflect.Field field =
+          LoadBalanceService.NodeInfo.class.getDeclaredField("connectionCount");
+      field.setAccessible(true);
+      field.setInt(info, count);
     } catch (ReflectiveOperationException e) {
       throw new RuntimeException(e);
     }

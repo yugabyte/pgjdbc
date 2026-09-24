@@ -107,10 +107,14 @@ public class LoadBalanceService {
     boolean publicIPsGivenForAll = true;
     String uuid = null;
     ClusterInfo cluster = null;
-    Set<String> hostsInLatestQuery = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    // Case-sensitive, to match hostToNodeInfoMap. Comparing case-insensitively here while the
+    // map keys case-sensitively lets a stale entry survive eviction forever: a host returned
+    // with different case is inserted under the new spelling, while the old spelling looks
+    // "still present" and is never removed.
+    Set<String> hostsInLatestQuery = new HashSet<>();
     while (rs.next()) {
       String host = rs.getString("host");
-      hostsInLatestQuery.add(host);
+      LOGGER.finest("Received entry for host " + host);
       String publicHost = rs.getString("public_ip");
       publicHost = publicHost == null ? "" : publicHost;
       String port = rs.getString("port");
@@ -142,12 +146,17 @@ public class LoadBalanceService {
         hostToNodeInfoMap = cluster.getHostToNodeInfoMap() != null ?
             cluster.getHostToNodeInfoMap() : new ConcurrentHashMap<>();
       }
-      NodeInfo nodeInfo = hostToNodeInfoMap.containsKey(host) ? hostToNodeInfoMap.get(host) :
-          new NodeInfo();
+      // Key this node the same way the map is currently keyed, so that the lookup below, the
+      // insert further down and the eviction after the loop all address the same entry. A
+      // previous refresh may have re-keyed the map by public_ip.
+      String key = cluster.isKeyedByPublicIp() && !publicHost.isEmpty() ? publicHost : host;
+      hostsInLatestQuery.add(key);
+      NodeInfo nodeInfo = hostToNodeInfoMap.containsKey(key) ? hostToNodeInfoMap.get(key)
+          : new NodeInfo();
       synchronized (nodeInfo) {
         nodeInfo.host = host;
         nodeInfo.publicIP = publicHost;
-        publicIPsGivenForAll = !publicHost.isEmpty();
+        publicIPsGivenForAll = publicIPsGivenForAll ? !publicHost.isEmpty() : false;
         nodeInfo.placement = new CloudPlacement(cloud, region, zone);
         nodeInfo.nodeType = nodeType;
         try {
@@ -166,8 +175,11 @@ public class LoadBalanceService {
           }
         }
       }
-      hostToNodeInfoMap.putIfAbsent(host, nodeInfo);
-      LOGGER.info("Added " + nodeInfo + " to the host map");
+      if (hostToNodeInfoMap.putIfAbsent(key, nodeInfo) == null) {
+        // Only when the node is new to the map. Logging every node on every refresh would
+        // swamp the log, since a failed connection forces a refresh via forceRefreshOnce.
+        LOGGER.info("Added " + nodeInfo + " to the host map");
+      }
 
       InetAddress hostInetAddr;
       InetAddress publicHostInetAddr;
@@ -205,8 +217,7 @@ public class LoadBalanceService {
       return lb.getUuid();
     }
 
-    Set<String> removedHosts = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-    removedHosts.addAll(hostToNodeInfoMap.keySet());
+    Set<String> removedHosts = new HashSet<>(hostToNodeInfoMap.keySet());
     removedHosts.removeAll(hostsInLatestQuery);
     if (!removedHosts.isEmpty()) {
       LOGGER.info("Evicting hosts no longer returned by yb_servers(): " + removedHosts);
@@ -221,17 +232,24 @@ public class LoadBalanceService {
       }
       lb.setUuid(uuid);
     }
-    if ((cluster.getUseHostColumn() != null && !cluster.getUseHostColumn()) || (cluster.getUseHostColumn() == null && publicIPsGivenForAll)) {
-      LOGGER.info("Will use 'public_ip' addresses for connections");
-      ArrayList<String> hosts = Collections.list(hostToNodeInfoMap.keys());
-      for (String host : hosts) {
-        NodeInfo info = hostToNodeInfoMap.get(host);
-        hostToNodeInfoMap.remove(info.host);
-        hostToNodeInfoMap.put(info.publicIP, info);
+    boolean usePublicIp = (cluster.getUseHostColumn() != null && !cluster.getUseHostColumn())
+        || (cluster.getUseHostColumn() == null && publicIPsGivenForAll);
+    if (usePublicIp) {
+      if (!cluster.isKeyedByPublicIp()) {
+        LOGGER.info("Re-keying the host map by 'public_ip' addresses");
+        rekeyBy(hostToNodeInfoMap, true);
+        cluster.setKeyedByPublicIp(true);
       }
-    } else if (cluster.getUseHostColumn() == null) {
-      LOGGER.warning("Unable to identify set of addresses to use for establishing connections. "
-          + "Using private addresses.");
+    } else {
+      if (cluster.isKeyedByPublicIp()) {
+        LOGGER.info("Re-keying the host map by 'host' addresses");
+        rekeyBy(hostToNodeInfoMap, false);
+        cluster.setKeyedByPublicIp(false);
+      }
+      if (cluster.getUseHostColumn() == null) {
+        LOGGER.warning("Unable to identify set of addresses to use for establishing connections. "
+            + "Using private addresses.");
+      }
     }
     lb.setLastRefreshTime(System.currentTimeMillis());
     if (cluster != null) {
@@ -239,6 +257,27 @@ public class LoadBalanceService {
     }
     uuidToClusterInfoMap.putIfAbsent(uuid, cluster);
     return uuid;
+  }
+
+  /**
+   * Re-keys every entry by its public_ip (or back by its host). Removes by the key actually
+   * iterated rather than by a field of the value, so an entry cannot be dropped twice and a
+   * stale key cannot survive. A node without a public_ip stays keyed by its host, which is the
+   * same fallback the per-row key uses.
+   */
+  private static void rekeyBy(ConcurrentHashMap<String, NodeInfo> hostToNodeInfoMap,
+      boolean publicIp) {
+    for (String key : Collections.list(hostToNodeInfoMap.keys())) {
+      NodeInfo info = hostToNodeInfoMap.get(key);
+      if (info == null) {
+        continue;
+      }
+      String newKey = publicIp && !info.publicIP.isEmpty() ? info.publicIP : info.host;
+      if (!newKey.equals(key)) {
+        hostToNodeInfoMap.remove(key);
+        hostToNodeInfoMap.put(newKey, info);
+      }
+    }
   }
 
   private static void markAsFailed(String uuid, String host) {
@@ -760,6 +799,12 @@ public class LoadBalanceService {
     private Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> lbKeyToLBMap =
         new ConcurrentHashMap<>();
     private Boolean useHostColumn = null;
+    /**
+     * Which key form {@link #hostToNodeInfoMap} is currently in. The tail of
+     * {@link #refresh} re-keys the map by public_ip for clusters reached that way, so lookups,
+     * inserts and eviction in the next refresh must all use the same form.
+     */
+    private volatile boolean keyedByPublicIp = false;
 
     public Connection getControlConnection() {
       return controlConnection;
@@ -779,6 +824,14 @@ public class LoadBalanceService {
 
     public Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> getLbKeyToLBMap() {
       return lbKeyToLBMap;
+    }
+
+    public boolean isKeyedByPublicIp() {
+      return keyedByPublicIp;
+    }
+
+    public void setKeyedByPublicIp(boolean keyedByPublicIp) {
+      this.keyedByPublicIp = keyedByPublicIp;
     }
 
     public Boolean getUseHostColumn() {
