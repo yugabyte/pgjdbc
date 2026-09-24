@@ -244,26 +244,51 @@ class LoadBalanceServiceRefreshTest {
   }
 
   /**
-   * Same public-IP shape, but the driver could not decide which address set to use: the control
-   * connection is to an endpoint that is neither the node's host nor its public_ip (a k8s service
-   * or load balancer), and public_ip does not resolve. useHostColumn stays null, yet the tail of
-   * refresh() still re-keys the map by public_ip because publicIPsGivenForAll is true.
+   * The driver could not decide which address set to use: the control connection is to an
+   * endpoint that is neither the node's host nor its public_ip (a k8s service or load balancer).
+   * Every node gives a public_ip and every one resolves, so public addresses are used and node
+   * state survives the refresh.
    */
   @Test
-  void undeterminedHostColumnWithPublicIpsRetainsNodeState() throws SQLException {
+  void undeterminedHostColumnWithResolvablePublicIpsKeepsPublicIpKeys() throws SQLException {
     String uuid = "test-uuid";
-    seedPublicIpKeyedCluster(uuid);
-    // The driver never managed to determine this; the previous refresh still re-keyed the map.
+    seedPublicIpKeyedCluster(uuid, "10.1.0.1", "10.1.0.2");
     LoadBalanceService.uuidToClusterInfoMap.get(uuid).setUseHostColumn(null);
 
     LoadBalanceService.refresh(mockConn, 300, lb);
 
+    LoadBalanceService.ClusterInfo cluster = LoadBalanceService.uuidToClusterInfoMap.get(uuid);
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
-        LoadBalanceService.uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
-    assertTrue(updatedMap.containsKey("node-a.example.com"),
-        "map should still be keyed by public_ip");
-    assertEquals(5, updatedMap.get("node-a.example.com").getConnectionCount(),
+        cluster.getHostToNodeInfoMap();
+    assertTrue(cluster.isKeyedByPublicIp());
+    assertTrue(updatedMap.containsKey("10.1.0.1"), "map should stay keyed by public_ip");
+    assertEquals(5, updatedMap.get("10.1.0.1").getConnectionCount(),
         "connection count must survive a refresh that still reports the node");
+  }
+
+  /**
+   * Same, except the public_ip values are set but do not resolve (k8s-internal names seen from
+   * outside the cluster). Guessing public addresses there hands the balancer targets it cannot
+   * connect to, so the map falls back to host addresses -- carrying node state with it.
+   */
+  @Test
+  void undeterminedHostColumnWithUnresolvablePublicIpsFallsBackToHost() throws SQLException {
+    String uuid = "test-uuid";
+    seedPublicIpKeyedCluster(uuid);
+    LoadBalanceService.uuidToClusterInfoMap.get(uuid).setUseHostColumn(null);
+
+    LoadBalanceService.refresh(mockConn, 300, lb);
+
+    LoadBalanceService.ClusterInfo cluster = LoadBalanceService.uuidToClusterInfoMap.get(uuid);
+    ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
+        cluster.getHostToNodeInfoMap();
+    assertFalse(cluster.isKeyedByPublicIp());
+    assertTrue(updatedMap.containsKey("10.0.0.1"), "map should fall back to host addresses");
+    assertFalse(updatedMap.containsKey("node-a.example.com"),
+        "unresolvable public_ip must not be left as a key");
+    assertEquals(2, updatedMap.size(), "one entry per node");
+    assertEquals(5, updatedMap.get("10.0.0.1").getConnectionCount(),
+        "connection count must survive the fallback re-key");
   }
 
   @Test
@@ -387,11 +412,16 @@ class LoadBalanceServiceRefreshTest {
    * was just marked DOWN. yb_servers() then reports both nodes as still present.
    */
   private void seedPublicIpKeyedCluster(String uuid) throws SQLException {
+    seedPublicIpKeyedCluster(uuid, "node-a.example.com", "node-b.example.com");
+  }
+
+  private void seedPublicIpKeyedCluster(String uuid, String publicIpA, String publicIpB)
+      throws SQLException {
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> hostMap = new ConcurrentHashMap<>();
     LoadBalanceService.NodeInfo nodeA =
-        addNodeInfo(hostMap, "10.0.0.1", "node-a.example.com", 5433, "aws", "us-west", "us-west-2a");
+        addNodeInfo(hostMap, "10.0.0.1", publicIpA, 5433, "aws", "us-west", "us-west-2a");
     LoadBalanceService.NodeInfo nodeB =
-        addNodeInfo(hostMap, "10.0.0.2", "node-b.example.com", 5433, "aws", "us-west", "us-west-2b");
+        addNodeInfo(hostMap, "10.0.0.2", publicIpB, 5433, "aws", "us-west", "us-west-2b");
     keyByPublicIp(hostMap, nodeA);
     keyByPublicIp(hostMap, nodeB);
 
@@ -407,10 +437,8 @@ class LoadBalanceServiceRefreshTest {
     LoadBalanceService.uuidToClusterInfoMap.put(uuid, cluster);
 
     setupResultSetRows(
-        row("10.0.0.1", "node-a.example.com", "5433", "aws", "us-west", "us-west-2a", "primary",
-            uuid),
-        row("10.0.0.2", "node-b.example.com", "5433", "aws", "us-west", "us-west-2b", "primary",
-            uuid)
+        row("10.0.0.1", publicIpA, "5433", "aws", "us-west", "us-west-2a", "primary", uuid),
+        row("10.0.0.2", publicIpB, "5433", "aws", "us-west", "us-west-2b", "primary", uuid)
     );
     lb.setUuid(uuid);
   }

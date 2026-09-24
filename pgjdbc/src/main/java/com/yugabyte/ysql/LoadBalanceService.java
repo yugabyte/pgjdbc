@@ -105,6 +105,9 @@ public class LoadBalanceService {
     InetAddress hostConnectedInetAddress = getConnectedInetAddress(conn);
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> hostToNodeInfoMap = null;
     boolean publicIPsGivenForAll = true;
+    // A public_ip we cannot even resolve is not a usable connection target. Tracked separately
+    // from publicIPsGivenForAll so the two reasons to reject public addresses stay distinct.
+    boolean publicIPsResolvableForAll = true;
     String uuid = null;
     ClusterInfo cluster = null;
     // Case-sensitive, to match hostToNodeInfoMap. Comparing case-insensitively here while the
@@ -196,6 +199,9 @@ public class LoadBalanceService {
         LOGGER.fine("Failed to get inet address for public_ip '" + publicHost + "' by name");
         publicHostInetAddr = null;
       }
+      if (!publicHost.isEmpty() && publicHostInetAddr == null) {
+        publicIPsResolvableForAll = false;
+      }
       if (cluster.getUseHostColumn() == null) {
         if (hostConnectedInetAddress.equals(hostInetAddr)) {
           cluster.setUseHostColumn(Boolean.TRUE);
@@ -232,8 +238,16 @@ public class LoadBalanceService {
       }
       lb.setUuid(uuid);
     }
+    // With useHostColumn undecided, public addresses are a guess: only take it when every node
+    // gave one and every one of them resolves. Otherwise the balancer would hand out addresses
+    // it cannot connect to and fall back to unbalanced connections for the life of the pool.
+    // useHostColumn == FALSE is not a guess -- it means the control connection reached the
+    // cluster on a public address -- so it is honoured as before.
+    boolean publicIpsUnusable = cluster.getUseHostColumn() == null && publicIPsGivenForAll
+        && !publicIPsResolvableForAll;
     boolean usePublicIp = (cluster.getUseHostColumn() != null && !cluster.getUseHostColumn())
-        || (cluster.getUseHostColumn() == null && publicIPsGivenForAll);
+        || (cluster.getUseHostColumn() == null && publicIPsGivenForAll
+            && publicIPsResolvableForAll);
     if (usePublicIp) {
       if (!cluster.isKeyedByPublicIp()) {
         LOGGER.info("Re-keying the host map by 'public_ip' addresses");
@@ -246,7 +260,10 @@ public class LoadBalanceService {
         rekeyBy(hostToNodeInfoMap, false);
         cluster.setKeyedByPublicIp(false);
       }
-      if (cluster.getUseHostColumn() == null) {
+      if (publicIpsUnusable) {
+        LOGGER.warning("Not using 'public_ip' addresses: they are set for all nodes but could not "
+            + "be resolved. Using 'host' addresses instead.");
+      } else if (cluster.getUseHostColumn() == null) {
         LOGGER.warning("Unable to identify set of addresses to use for establishing connections. "
             + "Using private addresses.");
       }
