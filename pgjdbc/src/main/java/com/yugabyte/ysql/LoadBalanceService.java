@@ -166,8 +166,8 @@ public class LoadBalanceService {
           }
         }
       }
-      LOGGER.finest("Adding " + nodeInfo);
       hostToNodeInfoMap.putIfAbsent(host, nodeInfo);
+      LOGGER.info("Added " + nodeInfo + " to the host map");
 
       InetAddress hostInetAddr;
       InetAddress publicHostInetAddr;
@@ -195,7 +195,7 @@ public class LoadBalanceService {
         }
         if (cluster.getUseHostColumn() != null) {
           LOGGER.info("Will use '" + (cluster.getUseHostColumn() ? "host" : "public_ip")
-              + "' address for connections");
+              + "' addresses for connections");
         }
       }
     }
@@ -222,7 +222,7 @@ public class LoadBalanceService {
       lb.setUuid(uuid);
     }
     if ((cluster.getUseHostColumn() != null && !cluster.getUseHostColumn()) || (cluster.getUseHostColumn() == null && publicIPsGivenForAll)) {
-      LOGGER.info("Will be using publicIPs for establishing connections");
+      LOGGER.info("Will use 'public_ip' addresses for connections");
       ArrayList<String> hosts = Collections.list(hostToNodeInfoMap.keys());
       for (String host : hosts) {
         NodeInfo info = hostToNodeInfoMap.get(host);
