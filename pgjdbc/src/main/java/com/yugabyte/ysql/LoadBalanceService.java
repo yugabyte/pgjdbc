@@ -249,6 +249,7 @@ public class LoadBalanceService {
         || (cluster.getUseHostColumn() == null && publicIPsGivenForAll
             && publicIPsResolvableForAll);
     if (usePublicIp) {
+      cluster.setLoggedUnusablePublicIps(false);
       if (!cluster.isKeyedByPublicIp()) {
         LOGGER.info("Re-keying the host map by 'public_ip' addresses");
         rekeyBy(hostToNodeInfoMap, true);
@@ -261,11 +262,14 @@ public class LoadBalanceService {
         cluster.setKeyedByPublicIp(false);
       }
       if (publicIpsUnusable) {
-        LOGGER.warning("Not using 'public_ip' addresses: they are set for all nodes but could not "
-            + "be resolved. Using 'host' addresses instead.");
+        if (!cluster.hasLoggedUnusablePublicIps()) {
+          LOGGER.warning("Not using 'public_ip' addresses: they are set for all nodes but could "
+              + "not be resolved. Using 'host' addresses instead.");
+          cluster.setLoggedUnusablePublicIps(true);
+        }
       } else if (cluster.getUseHostColumn() == null) {
         LOGGER.warning("Unable to identify set of addresses to use for establishing connections. "
-            + "Using private addresses.");
+            + "Using 'host' addresses.");
       }
     }
     lb.setLastRefreshTime(System.currentTimeMillis());
@@ -822,6 +826,11 @@ public class LoadBalanceService {
      * inserts and eviction in the next refresh must all use the same form.
      */
     private volatile boolean keyedByPublicIp = false;
+    /**
+     * Latches the "public_ip set but unresolvable" warning so it is logged on entering that
+     * state rather than on every refresh. Per cluster, so one cluster cannot mute another.
+     */
+    private volatile boolean loggedUnusablePublicIps = false;
 
     public Connection getControlConnection() {
       return controlConnection;
@@ -841,6 +850,14 @@ public class LoadBalanceService {
 
     public Map<LoadBalanceProperties.LoadBalancerKey, LoadBalancer> getLbKeyToLBMap() {
       return lbKeyToLBMap;
+    }
+
+    public boolean hasLoggedUnusablePublicIps() {
+      return loggedUnusablePublicIps;
+    }
+
+    public void setLoggedUnusablePublicIps(boolean loggedUnusablePublicIps) {
+      this.loggedUnusablePublicIps = loggedUnusablePublicIps;
     }
 
     public boolean isKeyedByPublicIp() {
