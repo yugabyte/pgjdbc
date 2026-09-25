@@ -219,8 +219,8 @@ class LoadBalanceServiceRefreshTest {
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
         LoadBalanceService.uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
     assertEquals(2, updatedMap.size(), "map should hold one entry per node, keyed by public_ip");
-    assertTrue(updatedMap.containsKey("node-a.example.com"));
-    assertEquals(5, updatedMap.get("node-a.example.com").getConnectionCount(),
+    assertTrue(updatedMap.containsKey("node-a.invalid"));
+    assertEquals(5, updatedMap.get("node-a.invalid").getConnectionCount(),
         "connection count must survive a refresh that still reports the node");
   }
 
@@ -238,8 +238,8 @@ class LoadBalanceServiceRefreshTest {
 
     ConcurrentHashMap<String, LoadBalanceService.NodeInfo> updatedMap =
         LoadBalanceService.uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap();
-    assertTrue(updatedMap.containsKey("node-b.example.com"));
-    assertTrue(updatedMap.get("node-b.example.com").isDown(),
+    assertTrue(updatedMap.containsKey("node-b.invalid"));
+    assertTrue(updatedMap.get("node-b.invalid").isDown(),
         "a host marked DOWN must stay DOWN until failed-host-reconnect-delay-secs elapses");
   }
 
@@ -284,7 +284,7 @@ class LoadBalanceServiceRefreshTest {
         cluster.getHostToNodeInfoMap();
     assertFalse(cluster.isKeyedByPublicIp());
     assertTrue(updatedMap.containsKey("10.0.0.1"), "map should fall back to host addresses");
-    assertFalse(updatedMap.containsKey("node-a.example.com"),
+    assertFalse(updatedMap.containsKey("node-a.invalid"),
         "unresolvable public_ip must not be left as a key");
     assertEquals(2, updatedMap.size(), "one entry per node");
     assertEquals(5, updatedMap.get("10.0.0.1").getConnectionCount(),
@@ -412,7 +412,7 @@ class LoadBalanceServiceRefreshTest {
    * was just marked DOWN. yb_servers() then reports both nodes as still present.
    */
   private void seedPublicIpKeyedCluster(String uuid) throws SQLException {
-    seedPublicIpKeyedCluster(uuid, "node-a.example.com", "node-b.example.com");
+    seedPublicIpKeyedCluster(uuid, "node-a.invalid", "node-b.invalid");
   }
 
   private void seedPublicIpKeyedCluster(String uuid, String publicIpA, String publicIpB)

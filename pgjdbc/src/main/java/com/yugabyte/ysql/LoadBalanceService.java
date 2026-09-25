@@ -220,6 +220,9 @@ public class LoadBalanceService {
 
     if (cluster == null || uuid == null || hostToNodeInfoMap == null) {
       LOGGER.warning("yb_servers() returned no rows, skipping refresh");
+      // Still advance the refresh clock. Leaving it alone keeps needsRefresh() true, so every
+      // subsequent getConnection() would run another yb_servers() under the class monitor.
+      lb.setLastRefreshTime(System.currentTimeMillis());
       return lb.getUuid();
     }
 
@@ -639,7 +642,11 @@ public class LoadBalanceService {
           if (refreshFailed) {
             LOGGER.warning("Exception while refreshing: " + ex + ", " + ex.getSQLState());
             String failed = ((PgConnection) controlConnection).getQueryExecutor().getHostSpec().getHost();
-            markAsFailed(uuid, failed);
+            // A yb_servers() that ran past CONTROL_CONN_QUERY_TIMEOUT_SECS says the cluster is
+            // slow, not that this node refuses client connections, so do not mark it DOWN.
+            if (!PSQLState.QUERY_CANCELED.getState().equals(ex.getSQLState())) {
+              markAsFailed(uuid, failed);
+            }
             // Drop the host we just failed to refresh against so we don't retry it indefinitely.
             hosts.remove(failed);
           } else {
