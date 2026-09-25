@@ -91,6 +91,10 @@ dependencies {
     testFixturesImplementation("junit:junit:4.13.2")
     testFixturesImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testFixturesImplementation("org.checkerframework:checker-qual:3.42.0")
+
+    // 4.x is the last line with Java 8 bytecode; the CI matrix still runs tests on Java 8.
+    // mockito-junit-jupiter is not needed: the tests use Mockito.mock()/when() directly.
+    testImplementation("org.mockito:mockito-core:4.11.0")
 }
 
 val skipReplicationTests by props()
