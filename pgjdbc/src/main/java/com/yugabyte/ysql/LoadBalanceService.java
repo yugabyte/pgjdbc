@@ -301,6 +301,26 @@ public class LoadBalanceService {
     }
   }
 
+  /**
+   * The configured timeout for this metadata-only path, capped at capSecs. A value of 0 disables
+   * the timeout in pgjdbc, and absent means the driver default, so both take the cap.
+   */
+  private static String cappedTimeoutSecs(Properties properties, String name, int capSecs) {
+    String configured = properties.getProperty(name);
+    if (configured != null && !configured.trim().isEmpty()) {
+      try {
+        int secs = Integer.parseInt(configured.trim());
+        if (secs > 0 && secs < capSecs) {
+          return String.valueOf(secs);
+        }
+      } catch (NumberFormatException nfe) {
+        LOGGER.fine("Could not parse " + name + " '" + configured + "', using " + capSecs + "s"
+            + " for the control connection");
+      }
+    }
+    return String.valueOf(capSecs);
+  }
+
   private static void markAsFailed(String uuid, String host) {
     if (uuid == null) {
       LOGGER.info("Could not mark host: " + host + " as DOWN. Cluster UUID not present");
@@ -308,8 +328,11 @@ public class LoadBalanceService {
     }
     NodeInfo info = uuidToClusterInfoMap.get(uuid).getHostToNodeInfoMap().get(host);
     if (info == null) {
-      LOGGER.info("Could not mark host: " + host + " as DOWN. Host not found in cluster UUID: " + uuid);
-      return; // unexpected
+      // Expected for the cluster endpoint: the control connection may be dialing the address
+      // from the URL, which is not a node and so never a key in the host map.
+      LOGGER.fine("Could not mark host: " + host + " as DOWN. Host not found in cluster UUID: "
+          + uuid);
+      return;
     }
     synchronized (info) {
       String previous = info.isDown ? "DOWN" : "UP";
@@ -567,9 +590,13 @@ public class LoadBalanceService {
     if (needsRefresh(lb.getRefreshListSeconds(), lb)) {
       String url = key.getUrl();
       Properties properties = new Properties(key.getProperties());
-      // Do not inherit a disabled (0) or large app timeout for this metadata-only path.
-      properties.setProperty("connectTimeout", String.valueOf(CONTROL_CONN_CONNECT_TIMEOUT_SECS));
-      properties.setProperty("socketTimeout", String.valueOf(CONTROL_CONN_SOCKET_TIMEOUT_SECS));
+      // Cap, do not override: a disabled (0), absent or oversized app timeout must not be
+      // inherited by this metadata-only path, but a user asking for something shorter than the
+      // cap gets what they asked for. These are awaited under the class monitor.
+      properties.setProperty("connectTimeout",
+          cappedTimeoutSecs(properties, "connectTimeout", CONTROL_CONN_CONNECT_TIMEOUT_SECS));
+      properties.setProperty("socketTimeout",
+          cappedTimeoutSecs(properties, "socketTimeout", CONTROL_CONN_SOCKET_TIMEOUT_SECS));
       // Preserve the host from the URL for TLS hostname verification. The first attempt below
       // dials this host, but the retry path points the control connection at a node address
       // from yb_servers(), which a cluster-wide certificate does not cover.
@@ -581,10 +608,13 @@ public class LoadBalanceService {
             + LoadBalanceProperties.ENDPOINT_HOST_KEY
             + " for TLS hostname verification of the control connection");
       }
-      HostSpec[] hspec = hostSpecs(properties);
+      // The configured host(s) from the URL. hspec is pointed at fetched node addresses as the
+      // loop advances, so keep the original to be able to come back to it.
+      HostSpec[] configuredHspec = hostSpecs(properties);
+      HostSpec[] hspec = configuredHspec;
       Connection controlConnection = null;
       ArrayList<String> hosts = getAllAvailableHosts(lbKeyToUuidMap.get(key), new ArrayList<>());
-      boolean originalHostsTried = false;
+      boolean configuredHostsRetried = false;
       while (true) {
         boolean refreshFailed = false;
         try {
@@ -639,20 +669,26 @@ public class LoadBalanceService {
                 " YugabyteDB, consider upgrading it.");
             return null;
           }
-          // Return if control connection failed and no servers are available
-          if ((!refreshFailed || originalHostsTried) && hosts.isEmpty()) {
-            LOGGER.warning("Failed to establish control connection to available servers");
-            return null;
-          } else if (refreshFailed && !originalHostsTried) {
-            LOGGER.warning("Refresh failed. Retrying with original hspec");
-            originalHostsTried = true;  // continue to try the original hspec once
-          } else {
+          // Where to dial next. On a refresh failure, come back to the configured host(s) once
+          // before moving on to fetched node addresses. Worth doing even when hspec already
+          // points at them: the failed connection was usually the cached one rather than one
+          // dialed in this pass, and a configured host is often a service or load balancer
+          // address, so re-dialing it lands on whichever pod is currently healthy.
+          if (refreshFailed && !configuredHostsRetried) {
+            LOGGER.warning("Refresh failed. Retrying with the configured host(s): "
+                + configuredHspec[0].getHost() + (configuredHspec.length > 1 ? " and others" : ""));
+            hspec = configuredHspec;
+            configuredHostsRetried = true;
+          } else if (!hosts.isEmpty()) {
             // Try the first host in the list (don't have to check least loaded one since it's
             // just for the control connection). This also advances off a host whose refresh
             // failed, so we don't keep hammering the same node.
             HostSpec hs = new HostSpec(hosts.get(0), getPort(uuid, hosts.get(0)),
                 key.getProperties().getProperty("localSocketAddress"));
             hspec = new HostSpec[]{hs};
+          } else {
+            LOGGER.warning("Failed to establish control connection to available servers");
+            return null;
           }
         }
       }
