@@ -6,6 +6,16 @@
 
 <suppressions>
     <suppress checks=".*" files=".*[/\\]messages_[^.]*.java"/>
+    <!-- Sources under com/yugabyte/ysql are YugaByte-authored and carry an Apache 2.0
+         header, not the PostgreSQL Global Development Group header RegexpHeader expects. -->
+    <suppress checks="RegexpHeader"
+              files=".*[/\\]com[/\\]yugabyte[/\\]ysql[/\\].*\.java"/>
+    <!-- These YugabyteDB load-balancing tests are not maintained in this repository; the
+         driver-examples repository is their source of truth and changes belong there. They
+         are exempt from style checks so that re-copying them cannot break the build. Tests
+         added to this package are deliberately not covered by this pattern. -->
+    <suppress checks=".*"
+              files=".*[/\\]com[/\\]yugabyte[/\\]ysql[/\\](FallbackLBTestExtended|FallbackOptionsLBTest|LoadBalanceTest)\.java"/>
     <suppress checks="AvoidEscapedUnicodeCharacters"
               files="DatabaseEncodingTest.java"/>
 </suppressions>
